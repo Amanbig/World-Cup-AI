@@ -139,20 +139,20 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
   }, [persona]);
 
   return (
-    <div className="glass-panel p-5 border-white/5 bg-slate-900/40 flex flex-col gap-4 min-h-[460px] h-[550px]">
+    <div className="glass-panel p-6 border border-white/10 bg-slate-900/50 rounded-2xl flex flex-col gap-6 min-h-[500px] h-[650px] shadow-xl backdrop-blur-xl">
       
       {/* Chat Header */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Users size={16} className="text-neon-cyan" />
-            <h2 className="text-xs font-black uppercase tracking-widest text-white">
+      <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2.5">
+            <Users size={20} className="text-neon-cyan" />
+            <h2 className="text-sm font-bold uppercase tracking-widest text-white">
               Ask AI Analyst
             </h2>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${isLangflowOnline ? 'bg-neon-green animate-pulse shadow-[0_0_6px_var(--color-neon-green)]' : 'bg-gold shadow-[0_0_6px_var(--color-gold)]'}`} />
-            <span className="text-[9px] font-mono font-black text-gray-500 uppercase tracking-wider">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${isLangflowOnline ? 'bg-neon-green animate-pulse shadow-[0_0_8px_var(--color-neon-green)]' : 'bg-gold shadow-[0_0_8px_var(--color-gold)]'}`} />
+            <span className="text-xs font-mono font-bold text-gray-400 uppercase tracking-wider">
               {isLangflowOnline ? 'LANGFLOW ONLINE' : 'SIMULATION MODE (LOCAL)'}
             </span>
           </div>
@@ -161,27 +161,27 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
         {/* Langflow Toggle Button */}
         <button
           onClick={() => setShowWorkflow(!showWorkflow)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-mono font-black transition-all border cursor-pointer ${
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border cursor-pointer ${
             showWorkflow
               ? 'bg-neon-purple/20 border-neon-purple text-white shadow-lg'
               : 'bg-slate-800 border-slate-700 text-gray-400 hover:text-white'
           }`}
         >
-          <GitFork size={12} />
+          <GitFork size={14} />
           <span>WORKFLOW</span>
         </button>
       </div>
 
-      <div className="flex flex-1 gap-4 overflow-hidden relative">
+      <div className="flex flex-1 gap-6 overflow-hidden relative">
         
         {/* Chat Feed Column */}
-        <div className="flex-1 flex flex-col gap-3 h-full overflow-hidden">
+        <div className="flex-1 flex flex-col gap-4 h-full overflow-hidden">
           
           {/* Persona selector tabs */}
-          <div className="flex gap-1.5 bg-slate-950/60 p-1 rounded-xl border border-white/5 shrink-0">
+          <div className="flex gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-white/10 shrink-0">
             <button
               onClick={() => setPersona('fan')}
-              className={`flex-1 py-1 text-center rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 text-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 persona === 'fan'
                   ? 'bg-slate-800 text-white shadow-md'
                   : 'text-gray-500 hover:text-gray-300'
@@ -191,7 +191,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
             </button>
             <button
               onClick={() => setPersona('coach')}
-              className={`flex-1 py-1 text-center rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 text-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 persona === 'coach'
                   ? 'bg-neon-cyan/15 text-neon-cyan shadow-md border border-neon-cyan/20'
                   : 'text-gray-500 hover:text-gray-300'
@@ -201,7 +201,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
             </button>
             <button
               onClick={() => setPersona('child')}
-              className={`flex-1 py-1 text-center rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 py-1.5 text-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 persona === 'child'
                   ? 'bg-neon-purple/15 text-neon-purple shadow-md border border-neon-purple/20'
                   : 'text-gray-500 hover:text-gray-300'
@@ -212,23 +212,23 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
           </div>
 
           {/* Messages Scroll Area */}
-          <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-2.5 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-4 custom-scrollbar">
             {messages.map((msg, i) => (
               <div
                 key={i}
-                className={`chat-bubble leading-relaxed text-xs p-3.5 rounded-xl font-medium ${
+                className={`chat-bubble leading-relaxed text-sm p-4 rounded-2xl font-medium shadow-sm ${
                   msg.sender === 'assistant' 
-                    ? 'assistant bg-slate-800/40 border border-white/5 border-l-4 border-l-neon-cyan text-gray-200' 
-                    : 'user bg-gradient-to-r from-neon-cyan/10 to-neon-purple/10 border border-neon-cyan/25 text-white ml-auto max-w-[85%]'
+                    ? 'assistant bg-slate-800/60 border border-white/10 border-l-4 border-l-neon-cyan text-gray-200 rounded-tl-sm' 
+                    : 'user bg-gradient-to-r from-neon-cyan/15 to-neon-purple/15 border border-neon-cyan/30 text-white ml-auto max-w-[85%] rounded-tr-sm'
                 }`}
               >
                 <p className="whitespace-pre-line">{msg.text}</p>
                 
                 {msg.sender === 'assistant' && msg.confidence && msg.confidence < 100 && (
-                  <div className="mt-2.5 pt-2.5 border-t border-white/5 flex flex-wrap justify-between items-center text-[8px] font-mono font-black text-gray-500 gap-2 uppercase tracking-wider">
+                  <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap justify-between items-center text-xs font-mono font-bold text-gray-500 gap-2 uppercase tracking-wider">
                     <span>CONFIDENCE: <span className="text-gold font-bold">{msg.confidence}%</span></span>
                     {msg.sources && (
-                      <span className="truncate max-w-[150px]">SOURCE: {msg.sources.join(', ')}</span>
+                      <span className="truncate max-w-[200px]">SOURCE: {msg.sources.join(', ')}</span>
                     )}
                   </div>
                 )}
@@ -238,12 +238,12 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
           </div>
 
           {/* Quick Prompts Chip Carousel */}
-          <div className="flex gap-2 overflow-x-auto py-1 scrollbar-none shrink-0 select-none">
+          <div className="flex gap-3 overflow-x-auto py-2 custom-scrollbar shrink-0 select-none">
             {suggestions.map((sug, i) => (
               <button
                 key={i}
                 onClick={() => handleSendMessage(sug)}
-                className="shrink-0 px-3 py-1 bg-slate-950/60 border border-white/5 hover:border-neon-cyan/35 rounded-full text-[9px] font-black uppercase text-gray-400 hover:text-neon-cyan transition-all tracking-wider cursor-pointer"
+                className="shrink-0 px-4 py-1.5 bg-slate-950/60 border border-white/10 hover:border-neon-cyan/40 rounded-full text-xs font-bold text-gray-400 hover:text-neon-cyan transition-all cursor-pointer"
               >
                 {sug}
               </button>
@@ -256,55 +256,55 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
               e.preventDefault();
               handleSendMessage(inputValue);
             }}
-            className="flex gap-2 border border-white/5 rounded-xl bg-slate-950/80 p-1.5 focus-within:border-neon-cyan/45 transition-all shrink-0"
+            className="flex gap-3 border border-white/10 rounded-xl bg-slate-950/80 p-2 focus-within:border-neon-cyan/50 transition-all shrink-0 shadow-inner"
           >
             <input
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Ask about goals, tactics, or rulings..."
-              className="flex-1 bg-transparent border-0 outline-none text-xs text-white px-2.5 font-medium placeholder-gray-600"
+              className="flex-1 bg-transparent border-0 outline-none text-sm text-white px-3 font-medium placeholder-gray-600"
             />
             <button
               type="submit"
-              className="p-2 rounded-lg bg-neon-cyan text-slate-950 hover:bg-white hover:scale-105 transition-all shrink-0 cursor-pointer flex items-center justify-center"
+              className="p-2.5 rounded-lg bg-neon-cyan text-slate-950 hover:bg-white hover:scale-105 transition-all shrink-0 cursor-pointer flex items-center justify-center shadow-[0_0_10px_rgba(0,216,246,0.4)]"
             >
-              <Send size={11} className="fill-current" />
+              <Send size={16} className="fill-current" />
             </button>
           </form>
         </div>
 
         {/* Langflow Workflow Sidebar (Collapsible) */}
         {showWorkflow && (
-          <div className="w-[150px] bg-slate-950/90 border border-white/5 p-3 h-full flex flex-col gap-3 overflow-y-auto shrink-0 animate-fade-in absolute right-0 top-0 bottom-0 z-10 md:relative rounded-xl backdrop-blur-md">
-            <span className="text-[9px] font-black uppercase text-neon-purple tracking-widest block border-b border-white/5 pb-1 font-mono">
+          <div className="w-[200px] bg-slate-950/90 border border-white/10 p-4 h-full flex flex-col gap-4 overflow-y-auto shrink-0 animate-fade-in absolute right-0 top-0 bottom-0 z-10 md:relative rounded-xl backdrop-blur-md">
+            <span className="text-xs font-bold uppercase text-neon-purple tracking-widest block border-b border-white/10 pb-2 font-mono">
               WORKFLOW LOGS
             </span>
 
             {activeWorkflowPath.length === 0 ? (
-              <p className="text-[8px] font-mono font-bold text-gray-600 uppercase text-center mt-8 leading-normal">
+              <p className="text-xs font-mono font-bold text-gray-600 uppercase text-center mt-10 leading-relaxed">
                 Submit query to monitor active node telemetry.
               </p>
             ) : (
-              <div className="flex flex-col gap-1.5 mt-1">
+              <div className="flex flex-col gap-2 mt-2">
                 {activeWorkflowPath.map((node, index) => (
                   <React.Fragment key={node.id}>
                     <div
-                      className={`p-2.5 rounded-lg border text-[9px] leading-tight flex flex-col transition-all duration-300 ${
+                      className={`p-3 rounded-xl border text-xs leading-tight flex flex-col transition-all duration-300 shadow-md ${
                         node.status === 'completed' 
-                          ? 'border-neon-purple/20 bg-neon-purple/5 text-neon-purple' 
+                          ? 'border-neon-purple/30 bg-neon-purple/10 text-neon-purple' 
                           : node.status === 'active' 
-                          ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan animate-pulse shadow-[0_0_8px_rgba(0,216,246,0.15)]'
-                          : 'border-white/5 bg-slate-900/40 text-gray-500'
+                          ? 'border-neon-cyan/50 bg-neon-cyan/15 text-neon-cyan animate-pulse shadow-[0_0_12px_rgba(0,216,246,0.2)]'
+                          : 'border-white/10 bg-slate-900/50 text-gray-500'
                       }`}
                     >
-                      <span className="font-bold text-[9px] text-gray-300">{node.label}</span>
-                      <span className="text-[7px] text-gray-500 font-mono mt-0.5 uppercase tracking-wide">
+                      <span className="font-bold text-xs text-gray-200">{node.label}</span>
+                      <span className="text-[10px] text-gray-500 font-mono mt-1 uppercase tracking-wide">
                         {node.type}
                       </span>
                     </div>
                     {index < activeWorkflowPath.length - 1 && (
-                      <div className="w-[1.5px] h-3 bg-gradient-to-b from-neon-purple to-neon-cyan mx-auto"></div>
+                      <div className="w-0.5 h-4 bg-gradient-to-b from-neon-purple to-neon-cyan mx-auto"></div>
                     )}
                   </React.Fragment>
                 ))}

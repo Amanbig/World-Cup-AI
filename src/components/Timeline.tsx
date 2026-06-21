@@ -1,166 +1,168 @@
-import React, { useState } from 'react';
-import { ShieldAlert, Info } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { Target, AlertTriangle, ShieldAlert, Crosshair } from 'lucide-react';
 import { matchData } from '../data/matchData';
 import type { MatchEvent } from '../data/matchData';
 
 interface TimelineProps {
   currentMinute: number;
-  setCurrentMinute: (min: number) => void;
+  setCurrentMinute: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({ currentMinute, setCurrentMinute }) => {
-  const [hoveredEvent, setHoveredEvent] = useState<MatchEvent | null>(null);
-  const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const totalMinutes = 120;
-
-  // Filter events to show on timeline
-  const timelineEvents = matchData.events.filter(
-    (e) => e.type === 'goal' || e.type === 'var' || e.type === 'tactical_shift'
-  );
-
-  const handleMarkerHover = (e: React.MouseEvent, event: MatchEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const parentRect = e.currentTarget.parentElement?.getBoundingClientRect();
-    if (parentRect) {
-      setHoverPosition({
-        x: rect.left - parentRect.left + rect.width / 2,
-        y: rect.top - parentRect.top - 10
-      });
-    }
-    setHoveredEvent(event);
+  // Convert timeline percentage to match minute (0 to 120+)
+  const updateMinuteFromMouse = (clientX: number) => {
+    if (!timelineRef.current) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const percentage = x / rect.width;
+    const minute = Math.round(percentage * 120);
+    setCurrentMinute(minute);
   };
 
-  const getMarkerIcon = (type: string) => {
-    switch (type) {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    updateMinuteFromMouse(e.clientX);
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (isDragging) {
+      updateMinuteFromMouse(e.clientX);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
+  const getEventIcon = (event: MatchEvent) => {
+    switch (event.type) {
       case 'goal':
-        return <span className="text-[10px] select-none">⚽</span>;
+        return <Target size={14} className="text-white" />;
+      case 'card':
+        return <AlertTriangle size={14} className={event.description?.includes('Red') ? 'text-danger' : 'text-gold'} />;
       case 'var':
-        return <ShieldAlert size={10} className="text-gold" />;
-      case 'tactical_shift':
-        return <span className="text-[9px] font-bold text-neon-purple select-none">📋</span>;
+        return <ShieldAlert size={14} className="text-neon-purple" />;
+      case 'substitution':
+        return <Crosshair size={14} className="text-neon-cyan" />;
       default:
-        return <Info size={10} />;
+        return <div className="w-2 h-2 rounded-full bg-gray-500" />;
     }
   };
 
-  const getMarkerColor = (type: string) => {
-    switch (type) {
-      case 'goal':
-        return 'bg-white border-2 border-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]';
-      case 'var':
-        return 'bg-black border-2 border-gold shadow-[0_0_8px_rgba(255,209,44,0.6)]';
-      case 'tactical_shift':
-        return 'bg-black border-2 border-neon-purple shadow-[0_0_8px_rgba(157,78,221,0.6)]';
-      default:
-        return 'bg-slate-700 border border-white';
-    }
+  const getEventColor = (team?: 'Argentina' | 'France' | 'Neutral') => {
+    if (team === 'Argentina') return 'border-arg-blue bg-arg-blue/20';
+    if (team === 'France') return 'border-fra-blue-light bg-fra-blue-light/20';
+    return 'border-gray-500 bg-gray-500/20';
   };
+
+  const currentProgress = (currentMinute / 120) * 100;
 
   return (
-    <div className="glass-panel p-5 relative border-white/5 bg-slate-900/40 select-none">
-      
-      {/* Header Info */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-[10px] font-black tracking-widest text-gray-400 uppercase flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-neon-cyan animate-pulse"></span>
-          TIMELINE INTELLIGENCE SCRUBBER
-        </h3>
-        <span className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-wider">
-          Drag slider or click markers to explore events
+    <div className="glass-panel p-6 border border-white/10 bg-slate-900/50 rounded-2xl flex flex-col gap-5 shadow-xl backdrop-blur-xl">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-white flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-neon-cyan shadow-[0_0_8px_var(--color-neon-cyan)] animate-pulse" />
+          Timeline Intelligence Scrubber
+        </h2>
+        <span className="text-xs font-mono font-bold text-gray-500 uppercase tracking-widest">
+          DRAG SLIDER OR CLICK MARKERS TO EXPLORE EVENTS
         </span>
       </div>
 
-      {/* Interactive Timeline Track Area */}
-      <div className="relative h-12 my-3 px-3 flex items-center">
-        
-        {/* Track wrapper for precise boundary alignment */}
-        <div className="relative w-full h-full flex items-center">
-          
-          {/* Background Track Line */}
-          <div className="absolute left-0 right-0 h-1 bg-slate-800 rounded-full pointer-events-none" />
-
-          {/* Filled Progress Highlight */}
+      <div className="relative h-20 w-full select-none flex items-center">
+        {/* Timeline Track Base */}
+        <div 
+          ref={timelineRef}
+          className="absolute w-full h-3 bg-slate-950 rounded-full cursor-pointer shadow-inner border border-white/5"
+          onMouseDown={handleMouseDown}
+        >
+          {/* Active Progress Fill */}
           <div 
-            className="absolute left-0 h-1 bg-gradient-to-r from-neon-cyan to-neon-purple rounded-full shadow-[0_0_8px_rgba(0,216,246,0.35)] pointer-events-none"
-            style={{ width: `${(currentMinute / totalMinutes) * 100}%` }}
+            className="absolute top-0 left-0 h-full bg-gradient-to-r from-neon-purple/50 to-neon-cyan/50 rounded-full transition-all duration-150 ease-linear shadow-[0_0_12px_rgba(0,216,246,0.3)]"
+            style={{ width: `${Math.min(currentProgress, 100)}%` }}
           />
+        </div>
 
-          {/* Event Anchor Buttons */}
-          {timelineEvents.map((event, index) => {
-            const percentage = (event.minute / totalMinutes) * 100;
-            const isActive = currentMinute >= event.minute;
+        {/* Phase Dividers (HT, FT) */}
+        <div className="absolute w-full top-1/2 -translate-y-1/2 pointer-events-none">
+          {/* HT Line at 45m */}
+          <div className="absolute h-8 w-[2px] bg-white/10 top-1/2 -translate-y-1/2" style={{ left: `${(45/120)*100}%` }}></div>
+          {/* FT Line at 90m */}
+          <div className="absolute h-8 w-[2px] bg-white/10 top-1/2 -translate-y-1/2" style={{ left: `${(90/120)*100}%` }}></div>
+        </div>
+
+        {/* Event Markers */}
+        <div className="absolute w-full h-full pointer-events-none">
+          {matchData.events.map((event, index) => {
+            const leftPercent = (event.minute / 120) * 100;
+            // Alternating top/bottom placement based on minute odd/even just to prevent overlap
+            const isTop = event.minute % 2 === 0;
 
             return (
-              <button
+              <div
                 key={index}
-                className={`absolute w-6 h-6 rounded-full flex items-center justify-center pointer-events-auto z-20 -translate-x-1/2 transition-all hover:scale-125 cursor-pointer ${getMarkerColor(event.type)} ${
-                  isActive ? 'opacity-100' : 'opacity-40 hover:opacity-90'
-                }`}
-                style={{ left: `${percentage}%` }}
-                onMouseEnter={(e) => handleMarkerHover(e, event)}
-                onMouseLeave={() => setHoveredEvent(null)}
+                className="absolute flex flex-col items-center pointer-events-auto cursor-pointer group"
+                style={{ 
+                  left: `calc(${leftPercent}% - 14px)`,
+                  top: isTop ? '10px' : '38px',
+                  zIndex: currentMinute >= event.minute ? 10 : 5
+                }}
                 onClick={() => setCurrentMinute(event.minute)}
               >
-                {getMarkerIcon(event.type)}
-              </button>
+                {/* Connector Line */}
+                <div className={`w-[1px] ${isTop ? 'h-3 mb-1' : 'h-3 mt-1 order-last'} bg-white/20 group-hover:bg-neon-cyan transition-colors`} />
+                
+                {/* Marker Icon */}
+                <div 
+                  className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-md backdrop-blur-sm
+                    ${getEventColor(event.team)} 
+                    ${currentMinute >= event.minute ? 'opacity-100 scale-110 shadow-[0_0_10px_rgba(255,255,255,0.2)]' : 'opacity-40 scale-90 grayscale group-hover:grayscale-0 group-hover:opacity-100'}`
+                  }
+                  title={`${event.minute}': ${event.description}`}
+                >
+                  {getEventIcon(event)}
+                </div>
+
+                {/* Tooltip on Hover */}
+                <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 border border-white/20 text-white text-[10px] font-mono px-2.5 py-1.5 rounded-lg whitespace-nowrap pointer-events-none z-50 shadow-xl"
+                  style={{ top: isTop ? '-32px' : '32px' }}
+                >
+                  <span className="font-bold text-neon-cyan">{event.minute}'</span> - {event.title}
+                </div>
+              </div>
             );
           })}
-
-          {/* Transparent Slider Input overlay for dragging */}
-          <input
-            type="range"
-            min="0"
-            max={totalMinutes}
-            value={currentMinute}
-            onChange={(e) => setCurrentMinute(Number(e.target.value))}
-            className="absolute inset-x-0 w-full h-8 opacity-0 cursor-pointer z-30"
-          />
-
-          {/* Custom thumb tracker visual */}
-          <div 
-            className="absolute w-5 h-5 bg-slate-950 rounded-full border-2 border-neon-cyan shadow-[0_0_10px_rgba(0,216,246,0.8)] pointer-events-none z-10 -translate-x-1/2 flex items-center justify-center"
-            style={{ left: `${(currentMinute / totalMinutes) * 100}%` }}
-          >
-            <div className="w-1.5 h-1.5 bg-neon-cyan rounded-full animate-pulse" />
-          </div>
-
-          {/* Floating Hover Tooltip */}
-          {hoveredEvent && (
-            <div 
-              className="absolute z-50 bg-slate-950/95 border border-white/10 rounded-xl p-2.5 shadow-2xl max-w-[200px] text-xs pointer-events-none -translate-x-1/2 -translate-y-full flex flex-col gap-1 transition-all duration-150 backdrop-blur-md"
-              style={{ 
-                left: `${hoverPosition.x}px`,
-                top: `${hoverPosition.y}px`
-              }}
-            >
-              <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-1.5 mb-1 font-mono">
-                <span className="font-black text-white">{hoveredEvent.minute}'</span>
-                <span className={`px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider ${
-                  hoveredEvent.type === 'goal' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                  hoveredEvent.type === 'var' ? 'bg-gold/10 text-gold border border-gold/20' : 'bg-neon-purple/10 text-neon-purple border border-neon-purple/20'
-                }`}>
-                  {hoveredEvent.type.replace('_', ' ')}
-                </span>
-              </div>
-              <p className="font-bold text-gray-200 leading-tight">{hoveredEvent.title}</p>
-              <p className="text-[9px] text-gray-400 font-medium leading-normal mt-0.5">{hoveredEvent.impactText}</p>
-            </div>
-          )}
-
         </div>
+
+        {/* Current Time Scrubber Handle */}
+        <div 
+          className="absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-white border-4 border-neon-cyan rounded-full cursor-grab active:cursor-grabbing shadow-[0_0_15px_rgba(0,216,246,0.6)] transition-all pointer-events-none z-50"
+          style={{ left: `calc(${Math.min(currentProgress, 100)}% - 10px)` }}
+        />
       </div>
 
-      {/* Axis Scale Labels */}
-      <div className="flex justify-between text-[9px] font-mono font-black text-gray-500 px-1 border-t border-white/5 pt-2.5 mt-2">
+      {/* Axis Labels */}
+      <div className="flex justify-between px-2 text-xs font-mono font-bold text-gray-500 uppercase tracking-widest mt-1">
         <span>0' (KO)</span>
-        <span>20'</span>
-        <span>40'</span>
-        <span>60'</span>
-        <span>80'</span>
+        <span>45' (HT)</span>
         <span>90' (FT)</span>
-        <span>100'</span>
-        <span>110'</span>
         <span>120' (ET)</span>
       </div>
     </div>
