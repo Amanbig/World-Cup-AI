@@ -28,7 +28,92 @@ const doclingLawDB = {
   }
 };
 
-export function queryMatchAI(query: string, currentMinute: number, persona: 'fan' | 'coach' | 'child'): AIResponse {
+export const LANGFLOW_BASE_URL = 'http://localhost:7860';
+export const LANGFLOW_FLOW_ID = 'world-cup-analyst'; // User can customize this in the Langflow UI
+
+export async function checkLangflowStatus(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000); // 1s timeout
+    const response = await fetch(`${LANGFLOW_BASE_URL}/api/v1/health`, {
+      method: 'GET',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response.ok || response.status === 401 || response.status === 403 || response.status === 404;
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function queryMatchAI(
+  query: string,
+  currentMinute: number,
+  persona: 'fan' | 'coach' | 'child'
+): Promise<AIResponse> {
+  // Try querying the live Langflow instance
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout for API response
+    
+    // Build context parameters
+    const eventsTillNowText = matchData.events
+      .filter(e => e.minute <= currentMinute)
+      .map(e => `${e.minute}' - ${e.title}`)
+      .join(', ');
+
+    const score = `Argentina ${matchData.events.filter(e => e.minute <= currentMinute && e.type === 'goal' && e.team === 'Argentina').length} - ${matchData.events.filter(e => e.minute <= currentMinute && e.type === 'goal' && e.team === 'France').length} France`;
+
+    const response = await fetch(`${LANGFLOW_BASE_URL}/api/v1/run/${LANGFLOW_FLOW_ID}?stream=false`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        input_value: query,
+        input_type: 'chat',
+        output_type: 'chat',
+        tweaks: {
+          "MatchContext": {
+            "minute": currentMinute,
+            "score": score,
+            "persona": persona,
+            "events": eventsTillNowText
+          }
+        }
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      const responseText = data.outputs?.[0]?.outputs?.[0]?.results?.message?.text || 
+                           data.outputs?.[0]?.outputs?.[0]?.artifacts?.message ||
+                           data.result;
+
+      if (responseText) {
+        const activePath = [
+          { id: '1', label: 'User Query', status: 'completed' as const, type: 'input' as const },
+          { id: '2', label: 'Match Context Ingestion', status: 'completed' as const, type: 'process' as const },
+          { id: '3', label: `Langflow Container (${LANGFLOW_FLOW_ID})`, status: 'completed' as const, type: 'process' as const },
+          { id: '4', label: 'IBM Granite Foundation Model', status: 'completed' as const, type: 'llm' as const },
+          { id: '5', label: 'Live Text Answer', status: 'completed' as const, type: 'output' as const }
+        ];
+
+        return {
+          answer: responseText,
+          confidence: 98,
+          sources: ['Live Docker Langflow Flow', 'FIFA Technical Reports', 'Granite Model Context'],
+          langflowPath: activePath
+        };
+      }
+    }
+  } catch (error) {
+    console.log("Langflow is offline or unconfigured. Defaulting to high-fidelity local Granite simulation.");
+  }
+
   const normalizedQuery = query.toLowerCase();
   
   // Base Langflow Nodes

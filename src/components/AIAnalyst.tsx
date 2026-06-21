@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Users, GitFork } from 'lucide-react';
-import { queryMatchAI } from '../services/graniteEngine';
+import { queryMatchAI, checkLangflowStatus } from '../services/graniteEngine';
 import type { AIResponse } from '../services/graniteEngine';
 
 interface Message {
@@ -21,7 +21,19 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
   const [inputValue, setInputValue] = useState('');
   const [showWorkflow, setShowWorkflow] = useState(false);
   const [activeWorkflowPath, setActiveWorkflowPath] = useState<AIResponse['langflowPath']>([]);
+  const [isLangflowOnline, setIsLangflowOnline] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Monitor Langflow API status
+  useEffect(() => {
+    const checkStatus = async () => {
+      const status = await checkLangflowStatus();
+      setIsLangflowOnline(status);
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 4000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Suggested questions based on the current match time
   const getSuggestedQuestions = (minute: number) => {
@@ -65,14 +77,16 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = (textToSend: string) => {
+  const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim()) return;
 
     // Add user message
     const userMsg: Message = { sender: 'user', text: textToSend };
-    
+    setMessages((prev) => [...prev, userMsg]);
+    setInputValue('');
+
     // Generate AI response
-    const aiRes = queryMatchAI(textToSend, currentMinute, persona);
+    const aiRes = await queryMatchAI(textToSend, currentMinute, persona);
     
     const assistantMsg: Message = {
       sender: 'assistant',
@@ -82,9 +96,10 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
       langflowPath: aiRes.langflowPath
     };
 
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setActiveWorkflowPath(aiRes.langflowPath);
-    setInputValue('');
+    setMessages((prev) => [...prev, assistantMsg]);
+    if (aiRes.langflowPath) {
+      setActiveWorkflowPath(aiRes.langflowPath);
+    }
   };
 
   // If persona changes, update the last AI message to match the new persona tone
@@ -103,22 +118,24 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
     if (lastUserIndex === -1) return;
 
     const userText = messages[lastUserIndex].text;
-    const newAiRes = queryMatchAI(userText, currentMinute, persona);
     
-    setMessages((prev) => {
-      const copy = [...prev];
-      // Update last assistant message (which is after lastUserIndex)
-      copy[lastUserIndex + 1] = {
-        sender: 'assistant',
-        text: newAiRes.answer,
-        confidence: newAiRes.confidence,
-        sources: newAiRes.sources,
-        langflowPath: newAiRes.langflowPath
-      };
-      return copy;
+    queryMatchAI(userText, currentMinute, persona).then((newAiRes) => {
+      setMessages((prev) => {
+        const copy = [...prev];
+        // Update last assistant message (which is after lastUserIndex)
+        copy[lastUserIndex + 1] = {
+          sender: 'assistant',
+          text: newAiRes.answer,
+          confidence: newAiRes.confidence,
+          sources: newAiRes.sources,
+          langflowPath: newAiRes.langflowPath
+        };
+        return copy;
+      });
+      if (newAiRes.langflowPath) {
+        setActiveWorkflowPath(newAiRes.langflowPath);
+      }
     });
-
-    setActiveWorkflowPath(newAiRes.langflowPath);
   }, [persona]);
 
   return (
@@ -126,11 +143,19 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
       
       {/* Chat Header */}
       <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-        <div className="flex items-center gap-2">
-          <Users size={18} className="text-[var(--neon-cyan)]" />
-          <h2 className="text-sm font-black uppercase tracking-widest text-white">
-            Ask AI Analyst
-          </h2>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Users size={18} className="text-[var(--neon-cyan)]" />
+            <h2 className="text-sm font-black uppercase tracking-widest text-white">
+              Ask AI Analyst
+            </h2>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${isLangflowOnline ? 'bg-[var(--neon-green)] animate-pulse' : 'bg-[var(--gold)]'}`} />
+            <span className="text-[9px] font-mono font-black text-gray-400 uppercase tracking-wide">
+              {isLangflowOnline ? 'LANGFLOW ONLINE' : 'SIMULATION MODE (GRANITE)'}
+            </span>
+          </div>
         </div>
 
         {/* Langflow Toggle Button */}

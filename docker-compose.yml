@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  langflow:
+    image: langflowai/langflow:latest
+    container_name: langflow-engine
+    ports:
+      - "7860:7860"
+    environment:
+      - LANGFLOW_HOST=0.0.0.0
+      - LANGFLOW_PORT=7860
+      - LANGFLOW_LOG_LEVEL=info
+      # If the user wants to connect real OpenAI / Watsonx models:
+      # - OPENAI_API_KEY=your_key_here
+    volumes:
+      - langflow-data:/root/.cache/langflow
+    restart: unless-stopped
+
+volumes:
+  langflow-data:
