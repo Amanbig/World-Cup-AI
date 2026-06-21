@@ -139,7 +139,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
   }, [persona]);
 
   return (
-    <div className="glass-panel p-6 border border-white/10 bg-slate-900/50 rounded-2xl flex flex-col gap-6 min-h-[500px] h-[650px] shadow-xl backdrop-blur-xl">
+    <div className="glass-panel p-6 border border-white/10 bg-slate-900/50 rounded-2xl flex flex-col gap-5 shadow-xl backdrop-blur-xl" style={{ minHeight: '520px', maxHeight: '680px' }}>
       
       {/* Chat Header */}
       <div className="flex items-center justify-between border-b border-white/10 pb-4">
@@ -181,7 +181,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
           <div className="flex gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-white/10 shrink-0">
             <button
               onClick={() => setPersona('fan')}
-              className={`flex-1 py-1.5 text-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 py-2 text-center rounded-lg text-sm font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 persona === 'fan'
                   ? 'bg-slate-800 text-white shadow-md'
                   : 'text-gray-500 hover:text-gray-300'
@@ -191,7 +191,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
             </button>
             <button
               onClick={() => setPersona('coach')}
-              className={`flex-1 py-1.5 text-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 py-2 text-center rounded-lg text-sm font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 persona === 'coach'
                   ? 'bg-neon-cyan/15 text-neon-cyan shadow-md border border-neon-cyan/20'
                   : 'text-gray-500 hover:text-gray-300'
@@ -201,7 +201,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
             </button>
             <button
               onClick={() => setPersona('child')}
-              className={`flex-1 py-1.5 text-center rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 py-2 text-center rounded-lg text-sm font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 persona === 'child'
                   ? 'bg-neon-purple/15 text-neon-purple shadow-md border border-neon-purple/20'
                   : 'text-gray-500 hover:text-gray-300'
@@ -238,7 +238,7 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
           </div>
 
           {/* Quick Prompts Chip Carousel */}
-          <div className="flex gap-3 overflow-x-auto py-2 custom-scrollbar shrink-0 select-none">
+          <div className="flex gap-3 overflow-x-auto py-3 custom-scrollbar shrink-0 select-none">
             {suggestions.map((sug, i) => (
               <button
                 key={i}
@@ -263,11 +263,11 @@ export const AIAnalyst: React.FC<AIAnalystProps> = ({ currentMinute }) => {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Ask about goals, tactics, or rulings..."
-              className="flex-1 bg-transparent border-0 outline-none text-sm text-white px-3 font-medium placeholder-gray-600"
+              className="flex-1 bg-transparent border-0 outline-none text-base text-white px-4 py-2 font-medium placeholder-gray-500"
             />
             <button
               type="submit"
-              className="p-2.5 rounded-lg bg-neon-cyan text-slate-950 hover:bg-white hover:scale-105 transition-all shrink-0 cursor-pointer flex items-center justify-center shadow-[0_0_10px_rgba(0,216,246,0.4)]"
+              className="p-3 rounded-lg bg-neon-cyan text-slate-950 hover:bg-white hover:scale-105 transition-all shrink-0 cursor-pointer flex items-center justify-center shadow-[0_0_10px_rgba(0,216,246,0.4)]"
             >
               <Send size={16} className="fill-current" />
             </button>

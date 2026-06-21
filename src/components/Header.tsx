@@ -81,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      <div className="max-w-[1800px] mx-auto px-6 md:px-10 py-5 flex items-center justify-between flex-wrap gap-6">
+      <div className="max-w-[1600px] w-full mx-auto px-6 md:px-10 py-5 flex items-center justify-between flex-wrap gap-6">
         {/* Logo and Pitch */}
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-neon-cyan to-neon-purple flex items-center justify-center shadow-lg shadow-neon-cyan/20 border border-white/20">
