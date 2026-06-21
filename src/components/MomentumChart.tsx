@@ -70,43 +70,43 @@ export const MomentumChart: React.FC<MomentumChartProps> = ({ currentMinute }) =
   const indicatorX = padding + (currentMinute / 120) * (width - 2 * padding);
 
   return (
-    <div className="glass-panel p-5 border-[rgba(255,255,255,0.08)] bg-[rgba(15,23,42,0.45)] flex flex-col gap-4">
+    <div className="glass-panel p-5 border-white/5 bg-slate-900/40 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Activity size={18} className="text-[var(--neon-cyan)] animate-pulse" />
-          <h2 className="text-sm font-black uppercase tracking-widest text-white">
+          <Activity size={16} className="text-neon-cyan animate-pulse" />
+          <h2 className="text-xs font-black uppercase tracking-widest text-white">
             Momentum Swing Analysis
           </h2>
         </div>
-        <div className="flex gap-4 text-[10px] font-bold">
-          <span className="flex items-center gap-1 text-[var(--arg-blue)]">
-            <span className="w-2 h-2 rounded bg-[var(--arg-blue)]"></span> ARG
+        <div className="flex gap-4 text-[9px] font-mono font-black">
+          <span className="flex items-center gap-1.5 text-arg-blue">
+            <span className="w-1.5 h-1.5 rounded-full bg-arg-blue shadow-[0_0_6px_var(--color-arg-blue)]"></span> ARGENTINA
           </span>
-          <span className="flex items-center gap-1 text-[var(--fra-blue-light)]">
-            <span className="w-2 h-2 rounded bg-[var(--fra-blue-light)]"></span> FRA
+          <span className="flex items-center gap-1.5 text-fra-blue-light">
+            <span className="w-1.5 h-1.5 rounded-full bg-fra-blue-light shadow-[0_0_6px_var(--color-fra-blue-light)]"></span> FRANCE
           </span>
         </div>
       </div>
 
       {/* SVG Chart */}
-      <div className="w-full bg-[rgba(11,15,25,0.4)] border border-[rgba(255,255,255,0.05)] rounded-xl p-2 relative">
+      <div className="w-full bg-slate-950/40 border border-white/5 rounded-xl p-2 relative">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
           <defs>
             {/* Gradients */}
             <linearGradient id="argGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--arg-blue)" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="var(--arg-blue)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--color-arg-blue)" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="var(--color-arg-blue)" stopOpacity="0" />
             </linearGradient>
             <linearGradient id="fraGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--fra-blue-light)" stopOpacity="0" />
-              <stop offset="100%" stopColor="var(--fra-blue-light)" stopOpacity="0.4" />
+              <stop offset="0%" stopColor="var(--color-fra-blue-light)" stopOpacity="0" />
+              <stop offset="100%" stopColor="var(--color-fra-blue-light)" stopOpacity="0.35" />
             </linearGradient>
           </defs>
 
           {/* Grid lines */}
-          <line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="3" />
-          <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="rgba(116, 172, 223, 0.05)" strokeWidth="1" />
-          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="rgba(42, 82, 190, 0.05)" strokeWidth="1" />
+          <line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="3" />
+          <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="rgba(116, 172, 223, 0.03)" strokeWidth="1" />
+          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="rgba(42, 82, 190, 0.03)" strokeWidth="1" />
 
           {/* Area Fills */}
           <path d={argFillPath()} fill="url(#argGrad)" />
@@ -117,18 +117,18 @@ export const MomentumChart: React.FC<MomentumChartProps> = ({ currentMinute }) =
             d={linePath}
             fill="none"
             stroke="url(#lineGrad)"
-            strokeWidth="2.5"
+            strokeWidth="2"
             strokeLinecap="round"
-            className="stroke-[var(--neon-cyan)] shadow-md"
+            className="stroke-neon-cyan"
             style={{
               stroke: 'url(#lineGrad)',
             }}
           />
           {/* Custom line gradient */}
           <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="var(--neon-cyan)" />
-            <stop offset="50%" stopColor="var(--neon-purple)" />
-            <stop offset="100%" stopColor="var(--neon-cyan)" />
+            <stop offset="0%" stopColor="var(--color-neon-cyan)" />
+            <stop offset="50%" stopColor="var(--color-neon-purple)" />
+            <stop offset="100%" stopColor="var(--color-neon-cyan)" />
           </linearGradient>
 
           {/* Vertical Time Tracker Bar */}
@@ -137,10 +137,9 @@ export const MomentumChart: React.FC<MomentumChartProps> = ({ currentMinute }) =
             y1={5}
             x2={indicatorX}
             y2={height - 5}
-            stroke="var(--neon-cyan)"
+            stroke="var(--color-neon-cyan)"
             strokeWidth="1.5"
             strokeDasharray="2"
-            className="shadow-lg"
           />
 
           {/* Current tracker dot intersection */}
@@ -150,8 +149,8 @@ export const MomentumChart: React.FC<MomentumChartProps> = ({ currentMinute }) =
               <circle
                 cx={indicatorX}
                 cy={currentY}
-                r="5"
-                fill="var(--neon-cyan)"
+                r="4.5"
+                fill="var(--color-neon-cyan)"
                 stroke="#fff"
                 strokeWidth="1.5"
                 className="animate-pulse"
@@ -161,22 +160,22 @@ export const MomentumChart: React.FC<MomentumChartProps> = ({ currentMinute }) =
         </svg>
 
         {/* Labels overlay */}
-        <div className="absolute top-4 left-4 text-[9px] font-mono text-[var(--text-muted)]">ARGENTINA PRESSING</div>
-        <div className="absolute bottom-4 left-4 text-[9px] font-mono text-[var(--text-muted)]">FRANCE PRESSING</div>
+        <div className="absolute top-4 left-4 text-[8px] font-mono font-bold text-gray-500 uppercase tracking-wider">Argentina Domination</div>
+        <div className="absolute bottom-4 left-4 text-[8px] font-mono font-bold text-gray-500 uppercase tracking-wider">France Domination</div>
       </div>
 
       {/* Narrative Card */}
-      <div className="bg-[rgba(11,15,25,0.4)] border border-[rgba(255,255,255,0.05)] rounded-xl p-4 flex gap-4 items-start">
-        <div className="p-3 bg-[rgba(0,216,246,0.1)] border border-[rgba(0,216,246,0.2)] rounded-xl text-[var(--neon-cyan)] font-mono flex flex-col items-center justify-center shrink-0">
-          <span className="text-[10px] uppercase font-bold text-gray-400">VAL</span>
-          <span className="text-xl font-black">{currentMom.value > 0 ? `+${currentMom.value}` : currentMom.value}%</span>
+      <div className="bg-slate-950/40 border border-white/5 rounded-xl p-4 flex gap-4 items-start">
+        <div className="p-3 bg-neon-cyan/5 border border-neon-cyan/20 rounded-xl text-neon-cyan font-digital flex flex-col items-center justify-center shrink-0 min-w-[70px] shadow-inner">
+          <span className="text-[8px] uppercase font-black text-gray-400 tracking-wider">MOMENTUM</span>
+          <span className="text-lg font-black">{currentMom.value > 0 ? `+${currentMom.value}` : currentMom.value}%</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-black uppercase text-[var(--neon-cyan)] tracking-widest flex items-center gap-1">
+          <span className="text-[9px] font-black uppercase text-neon-cyan tracking-widest flex items-center gap-1">
             <TrendingUp size={12} />
-            Momentum Narrative • {currentMom.minute}'
+            MATCH CONTEXT • {currentMom.minute}'
           </span>
-          <p className="text-xs text-[var(--text-primary)] leading-relaxed">
+          <p className="text-xs text-gray-300 leading-relaxed font-medium">
             {currentMom.explanation}
           </p>
         </div>

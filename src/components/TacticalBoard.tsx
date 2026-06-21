@@ -30,22 +30,22 @@ export const TacticalBoard: React.FC<TacticalBoardProps> = ({ currentMinute }) =
   const { minuteKey, home, away } = getActiveFormation(currentMinute);
 
   return (
-    <div className="glass-panel p-5 border-[rgba(255,255,255,0.08)] bg-[rgba(15,23,42,0.45)] flex flex-col gap-4">
+    <div className="glass-panel p-5 border-white/5 bg-slate-900/40 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Shield size={18} className="text-[var(--neon-purple)]" />
-          <h2 className="text-sm font-black uppercase tracking-widest text-white">
+          <Shield size={16} className="text-neon-purple" />
+          <h2 className="text-xs font-black uppercase tracking-widest text-white">
             Tactical Formation Board
           </h2>
         </div>
-        <span className="px-2 py-0.5 rounded bg-[rgba(157,78,221,0.15)] border border-[rgba(157,78,221,0.3)] text-[10px] font-mono text-[var(--neon-purple)] font-bold">
-          Active Shift: {minuteKey}'
+        <span className="px-2 py-0.5 rounded bg-neon-purple/10 border border-neon-purple/35 text-[9px] font-mono text-neon-purple font-bold tracking-wider uppercase">
+          FORMATION AT {minuteKey}'
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* The Pitch View */}
-        <div className="pitch-container">
+        <div className="pitch-container border-2 border-white/5 rounded-xl overflow-hidden shadow-2xl">
           <div className="pitch-overlay">
             {/* Field Markings */}
             <div className="pitch-center-line"></div>
@@ -64,14 +64,14 @@ export const TacticalBoard: React.FC<TacticalBoardProps> = ({ currentMinute }) =
             {home.players.map((player) => (
               <div
                 key={player.id}
-                className="player-node team-home"
+                className="player-node team-home transition-all duration-[800ms]"
                 style={{
                   left: `${player.x}%`,
                   top: `${player.y}%`
                 }}
               >
                 {player.number}
-                <div className="player-label">
+                <div className="player-label text-[7px] font-bold py-0.5 px-1.5 rounded bg-slate-950/90 border border-white/15">
                   {player.name}
                 </div>
               </div>
@@ -81,14 +81,14 @@ export const TacticalBoard: React.FC<TacticalBoardProps> = ({ currentMinute }) =
             {away.players.map((player) => (
               <div
                 key={player.id}
-                className="player-node team-away"
+                className="player-node team-away transition-all duration-[800ms]"
                 style={{
                   left: `${player.x}%`,
                   top: `${player.y}%`
                 }}
               >
                 {player.number}
-                <div className="player-label">
+                <div className="player-label text-[7px] font-bold py-0.5 px-1.5 rounded bg-slate-950/90 border border-white/15">
                   {player.name}
                 </div>
               </div>
@@ -99,63 +99,63 @@ export const TacticalBoard: React.FC<TacticalBoardProps> = ({ currentMinute }) =
         {/* Tactical Shift Details Panel */}
         <div className="flex flex-col gap-4">
           {/* Argentina Formation Card */}
-          <div className="bg-[rgba(11,15,25,0.4)] border border-[rgba(255,255,255,0.05)] rounded-xl p-4 flex flex-col gap-2">
-            <div className="flex justify-between items-center border-b border-gray-800 pb-2 mb-1">
+          <div className="bg-slate-950/40 border border-white/5 rounded-xl p-4 flex flex-col gap-2">
+            <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs">🇦🇷</span>
-                <span className="text-xs font-black text-[var(--arg-blue)]">ARGENTINA</span>
+                <span className="text-[10px] font-black text-arg-blue tracking-wider">ARGENTINA</span>
               </div>
-              <span className="text-xs font-black font-mono text-white bg-gray-800 px-2 py-0.5 rounded">
+              <span className="text-[9px] font-mono font-black text-white bg-slate-800 px-2 py-0.5 rounded border border-white/5">
                 {home.formation}
               </span>
             </div>
-            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+            <p className="text-[11px] text-gray-300 leading-relaxed font-medium">
               {home.description}
             </p>
           </div>
 
           {/* France Formation Card */}
-          <div className="bg-[rgba(11,15,25,0.4)] border border-[rgba(255,255,255,0.05)] rounded-xl p-4 flex flex-col gap-2">
-            <div className="flex justify-between items-center border-b border-gray-800 pb-2 mb-1">
+          <div className="bg-slate-950/40 border border-white/5 rounded-xl p-4 flex flex-col gap-2">
+            <div className="flex justify-between items-center border-b border-white/5 pb-2 mb-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs">🇫🇷</span>
-                <span className="text-xs font-black text-[var(--fra-blue-light)]">FRANCE</span>
+                <span className="text-[10px] font-black text-fra-blue-light tracking-wider">FRANCE</span>
               </div>
-              <span className="text-xs font-black font-mono text-white bg-gray-800 px-2 py-0.5 rounded">
+              <span className="text-[9px] font-mono font-black text-white bg-slate-800 px-2 py-0.5 rounded border border-white/5">
                 {away.formation}
               </span>
             </div>
-            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+            <p className="text-[11px] text-gray-300 leading-relaxed font-medium">
               {away.description}
             </p>
           </div>
 
           {/* AI Tactical Explanation Board */}
-          <div className="bg-[rgba(157,78,221,0.04)] border border-[rgba(157,78,221,0.12)] rounded-xl p-4 flex flex-col gap-2.5">
-            <h4 className="text-[10px] font-black uppercase text-[var(--neon-purple)] tracking-widest flex items-center gap-1">
+          <div className="bg-neon-purple/5 border border-neon-purple/15 rounded-xl p-4 flex flex-col gap-2.5">
+            <h4 className="text-[9px] font-black uppercase text-neon-purple tracking-widest flex items-center gap-1.5 border-b border-neon-purple/10 pb-1.5 mb-0.5">
               <Eye size={12} />
               AI Tactical Shift Explainer
             </h4>
             
             <div className="flex flex-col gap-2 text-xs">
               <div>
-                <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block">Why:</span>
-                <p className="text-[11px] text-gray-300 leading-normal">{away.whyChanged || home.whyChanged}</p>
+                <span className="text-[9px] font-mono font-black text-gray-500 uppercase tracking-widest block">TACTICAL RATIONALE:</span>
+                <p className="text-[11px] text-gray-300 leading-normal font-medium mt-1">{away.whyChanged || home.whyChanged}</p>
               </div>
               
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <div className="bg-[rgba(57,255,20,0.03)] border border-[rgba(57,255,20,0.08)] p-2 rounded-lg">
-                  <span className="text-[9px] font-bold text-green-400 uppercase tracking-wider flex items-center gap-1">
+              <div className="grid grid-cols-2 gap-2.5 mt-2">
+                <div className="bg-green-500/5 border border-green-500/10 p-2.5 rounded-xl">
+                  <span className="text-[9px] font-mono font-black text-green-400 uppercase tracking-widest flex items-center gap-1">
                     <Flame size={10} /> BENEFIT
                   </span>
-                  <p className="text-[10px] text-gray-300 mt-1 leading-tight">{away.expectedBenefit || home.expectedBenefit}</p>
+                  <p className="text-[10px] text-gray-300 mt-1 leading-normal font-semibold">{away.expectedBenefit || home.expectedBenefit}</p>
                 </div>
                 
-                <div className="bg-[rgba(255,56,96,0.03)] border border-[rgba(255,56,96,0.08)] p-2 rounded-lg">
-                  <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider flex items-center gap-1">
+                <div className="bg-danger/5 border border-danger/10 p-2.5 rounded-xl">
+                  <span className="text-[9px] font-mono font-black text-danger uppercase tracking-widest flex items-center gap-1">
                     ⚠️ RISK
                   </span>
-                  <p className="text-[10px] text-gray-300 mt-1 leading-tight">{away.risk || home.risk}</p>
+                  <p className="text-[10px] text-gray-300 mt-1 leading-normal font-semibold">{away.risk || home.risk}</p>
                 </div>
               </div>
             </div>

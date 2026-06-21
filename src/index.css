@@ -1,4 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@500;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-arg-blue: #74ACDF;
+  --color-fra-blue: #0A2E65;
+  --color-fra-blue-light: #2A52BE;
+  --color-neon-cyan: #00D8F6;
+  --color-neon-purple: #9D4EDD;
+  --color-neon-green: #39FF14;
+  --color-danger: #FF3860;
+  --color-gold: #FFD12C;
+  --font-digital: 'Orbitron', monospace;
+}
 
 :root {
   /* Theme Colors */
