@@ -1,196 +1,159 @@
 """
 Creates and uploads the MatchMind RAG flow to a running Langflow instance.
 
-Prerequisites:
-  pip install langflow requests
-  langflow run   (starts Langflow on http://localhost:7860)
-
 Usage:
-  python create_flow.py
-  # Outputs the FLOW_ID to paste into backend/.env as LANGFLOW_FLOW_ID
+  python create_flow.py                          # connects to localhost:7860
+  python create_flow.py --url http://localhost:7860
+  python create_flow.py --url http://localhost:7860 --model gpt-4o-mini
+
+After running, copy the printed LANGFLOW_FLOW_ID into your .env file.
+The flow JSON is also saved as matchmind_flow.json for manual UI import.
 """
 
+import argparse
 import json
+import os
 import sys
 import uuid
 
 import requests
+from dotenv import load_dotenv
 
-LANGFLOW_URL = "http://localhost:7860"
+# Load .env from the project root (one level up from langflow/)
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+DEFAULT_URL   = os.getenv("LANGFLOW_URL", "http://localhost:7860")
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+DEFAULT_COLL  = os.getenv("CHROMA_COLLECTION", "fifa_rules")
+DEFAULT_DB    = os.getenv("CHROMA_DB_PATH", "./chroma_db")
 
 
-def build_flow_json() -> dict:
+# ── Flow builder ──────────────────────────────────────────────────────────────
+
+def build_flow(model: str, collection: str, db_path: str) -> dict:
     """
-    Builds a Langflow 1.x compatible flow JSON for a RAG pipeline:
-      TextInput → Chroma retriever → Prompt template → OpenAI LLM → ChatOutput
+    Builds a Langflow 1.x compatible flow JSON:
+      ChatInput → Chroma retriever → Prompt template → OpenAI LLM → ChatOutput
     """
-    node_input_id     = str(uuid.uuid4())
-    node_chroma_id    = str(uuid.uuid4())
-    node_prompt_id    = str(uuid.uuid4())
-    node_llm_id       = str(uuid.uuid4())
-    node_output_id    = str(uuid.uuid4())
+    nid = lambda: str(uuid.uuid4())
+
+    n_input   = nid()
+    n_chroma  = nid()
+    n_prompt  = nid()
+    n_llm     = nid()
+    n_output  = nid()
+
+    SYSTEM_PROMPT = (
+        "You are MatchMind, an expert FIFA Laws of the Game companion for the World Cup.\n"
+        "Explain VAR decisions, tactical shifts, and football rules with precision.\n"
+        "Always cite the specific FIFA Law (e.g. 'Law 11 – Offside').\n"
+        "Base your answer only on the retrieved context below.\n\n"
+        "Context from FIFA documents:\n{context}\n\n"
+        "Question: {question}\n\n"
+        "Answer:"
+    )
 
     nodes = [
-        # 1. Chat input — receives the user's question
+        # ── 1. Chat input ──────────────────────────────────────────────────────
         {
-            "id": node_input_id,
-            "type": "ChatInput",
+            "id": n_input, "type": "ChatInput",
             "position": {"x": 50, "y": 300},
             "data": {
                 "type": "ChatInput",
                 "node": {
-                    "template": {
-                        "input_value": {
-                            "type": "str",
-                            "value": "",
-                            "display_name": "Message",
-                        }
-                    },
-                    "description": "User question",
                     "display_name": "User Question",
-                }
-            }
+                    "description": "Fan's question about a VAR decision or FIFA rule",
+                    "template": {
+                        "input_value": {"type": "str", "value": "", "display_name": "Message"},
+                    },
+                },
+            },
         },
-        # 2. Chroma retriever — queries the vector store built by ingest.py
+        # ── 2. Chroma retriever ────────────────────────────────────────────────
         {
-            "id": node_chroma_id,
-            "type": "Chroma",
-            "position": {"x": 350, "y": 150},
+            "id": n_chroma, "type": "Chroma",
+            "position": {"x": 350, "y": 120},
             "data": {
                 "type": "Chroma",
                 "node": {
-                    "template": {
-                        "collection_name": {
-                            "type": "str",
-                            "value": "fifa_rules",
-                            "display_name": "Collection Name",
-                        },
-                        "persist_directory": {
-                            "type": "str",
-                            "value": "./chroma_db",
-                            "display_name": "Persist Directory",
-                        },
-                        "number_of_results": {
-                            "type": "int",
-                            "value": 5,
-                            "display_name": "Number of Results",
-                        },
-                        "search_type": {
-                            "type": "str",
-                            "value": "Similarity",
-                            "display_name": "Search Type",
-                        },
-                    },
-                    "description": "FIFA rules vector store (built by ingest.py)",
                     "display_name": "FIFA Rules Chroma",
-                }
-            }
+                    "description": "Vector store built by ingest.py (Docling + sentence-transformers)",
+                    "template": {
+                        "collection_name":    {"type": "str",   "value": collection,     "display_name": "Collection Name"},
+                        "persist_directory":  {"type": "str",   "value": db_path,        "display_name": "Persist Directory"},
+                        "number_of_results":  {"type": "int",   "value": 5,              "display_name": "Top-K Results"},
+                        "search_type":        {"type": "str",   "value": "Similarity",   "display_name": "Search Type"},
+                        "embedding_model":    {"type": "str",   "value": "all-MiniLM-L6-v2", "display_name": "Embedding Model"},
+                    },
+                },
+            },
         },
-        # 3. Prompt template — wraps context + question with the MatchMind system prompt
+        # ── 3. Prompt template ────────────────────────────────────────────────
         {
-            "id": node_prompt_id,
-            "type": "Prompt",
+            "id": n_prompt, "type": "Prompt",
             "position": {"x": 650, "y": 300},
             "data": {
                 "type": "Prompt",
                 "node": {
-                    "template": {
-                        "template": {
-                            "type": "str",
-                            "value": (
-                                "You are MatchMind, an expert FIFA Laws of the Game companion for the World Cup.\n"
-                                "Explain VAR decisions, tactical shifts, and football rules with precision and clarity.\n"
-                                "Always cite the specific Law or section (e.g. 'Law 11 – Offside').\n\n"
-                                "Relevant context from FIFA documents:\n{context}\n\n"
-                                "Fan's question: {question}\n\n"
-                                "Answer:"
-                            ),
-                            "display_name": "Template",
-                        },
-                        "context": {
-                            "type": "str",
-                            "value": "",
-                            "display_name": "Context",
-                        },
-                        "question": {
-                            "type": "str",
-                            "value": "",
-                            "display_name": "Question",
-                        },
-                    },
-                    "description": "MatchMind system prompt with retrieved context",
                     "display_name": "MatchMind Prompt",
-                }
-            }
+                    "description": "Combines retrieved FIFA context with the user question",
+                    "template": {
+                        "template": {"type": "str", "value": SYSTEM_PROMPT, "display_name": "Template"},
+                        "context":  {"type": "str", "value": "",            "display_name": "Context"},
+                        "question": {"type": "str", "value": "",            "display_name": "Question"},
+                    },
+                },
+            },
         },
-        # 4. OpenAI LLM node (swap model_name to 'ibm/granite-13b-chat-v2' for Granite)
+        # ── 4. LLM (OpenAI — swap model_name for WatsonX Granite) ────────────
         {
-            "id": node_llm_id,
-            "type": "OpenAI",
+            "id": n_llm, "type": "OpenAI",
             "position": {"x": 950, "y": 300},
             "data": {
                 "type": "OpenAI",
                 "node": {
-                    "template": {
-                        "model_name": {
-                            "type": "str",
-                            "value": "gpt-4o-mini",
-                            "display_name": "Model Name",
-                        },
-                        "temperature": {
-                            "type": "float",
-                            "value": 0.3,
-                            "display_name": "Temperature",
-                        },
-                        "max_tokens": {
-                            "type": "int",
-                            "value": 1024,
-                            "display_name": "Max Tokens",
-                        },
-                        "openai_api_key": {
-                            "type": "str",
-                            "value": "",
-                            "password": True,
-                            "display_name": "OpenAI API Key",
-                        },
-                    },
-                    "description": "LLM that generates the final explanation",
                     "display_name": "LLM (OpenAI / Granite)",
-                }
-            }
+                    "description": "Generates the final explanation. Change model_name for WatsonX.",
+                    "template": {
+                        "model_name":    {"type": "str",   "value": model, "display_name": "Model Name"},
+                        "temperature":   {"type": "float", "value": 0.3,   "display_name": "Temperature"},
+                        "max_tokens":    {"type": "int",   "value": 1024,  "display_name": "Max Tokens"},
+                        "openai_api_key":{"type": "str",   "value": os.getenv("OPENAI_API_KEY", ""), "password": True, "display_name": "OpenAI API Key"},
+                    },
+                },
+            },
         },
-        # 5. Chat output — returns the final answer
+        # ── 5. Chat output ────────────────────────────────────────────────────
         {
-            "id": node_output_id,
-            "type": "ChatOutput",
+            "id": n_output, "type": "ChatOutput",
             "position": {"x": 1250, "y": 300},
             "data": {
                 "type": "ChatOutput",
                 "node": {
-                    "template": {},
-                    "description": "Final answer to the fan",
                     "display_name": "Answer",
-                }
-            }
+                    "description": "Final answer returned to the MatchMind frontend",
+                    "template": {},
+                },
+            },
         },
     ]
 
     edges = [
-        # question → chroma (search query)
-        {"id": str(uuid.uuid4()), "source": node_input_id,  "target": node_chroma_id,  "sourceHandle": "text",   "targetHandle": "search_query"},
+        # question text → chroma search query
+        {"id": nid(), "source": n_input,  "target": n_chroma, "sourceHandle": "text",    "targetHandle": "search_query"},
         # chroma results → prompt context
-        {"id": str(uuid.uuid4()), "source": node_chroma_id, "target": node_prompt_id,  "sourceHandle": "results", "targetHandle": "context"},
-        # question → prompt question
-        {"id": str(uuid.uuid4()), "source": node_input_id,  "target": node_prompt_id,  "sourceHandle": "text",   "targetHandle": "question"},
+        {"id": nid(), "source": n_chroma, "target": n_prompt, "sourceHandle": "results", "targetHandle": "context"},
+        # question text → prompt question
+        {"id": nid(), "source": n_input,  "target": n_prompt, "sourceHandle": "text",    "targetHandle": "question"},
         # prompt → LLM
-        {"id": str(uuid.uuid4()), "source": node_prompt_id, "target": node_llm_id,     "sourceHandle": "prompt",  "targetHandle": "prompt"},
+        {"id": nid(), "source": n_prompt, "target": n_llm,    "sourceHandle": "prompt",  "targetHandle": "prompt"},
         # LLM → output
-        {"id": str(uuid.uuid4()), "source": node_llm_id,    "target": node_output_id,  "sourceHandle": "text",    "targetHandle": "input_value"},
+        {"id": nid(), "source": n_llm,    "target": n_output, "sourceHandle": "text",    "targetHandle": "input_value"},
     ]
 
     return {
         "name": "MatchMind RAG",
-        "description": "World Cup AI — explains VAR decisions and rules from FIFA documents",
+        "description": "World Cup AI — explains VAR decisions and FIFA Laws from ingested PDFs",
         "data": {
             "nodes": nodes,
             "edges": edges,
@@ -200,45 +163,57 @@ def build_flow_json() -> dict:
     }
 
 
-def upload_flow(flow_json: dict) -> str:
-    """POST the flow to Langflow and return its ID."""
+# ── Upload ────────────────────────────────────────────────────────────────────
+
+def upload(url: str, flow: dict) -> str:
     resp = requests.post(
-        f"{LANGFLOW_URL}/api/v1/flows",
-        json=flow_json,
+        f"{url}/api/v1/flows",
+        json=flow,
         headers={"Content-Type": "application/json"},
         timeout=30,
     )
     resp.raise_for_status()
-    flow_id = resp.json()["id"]
-    return flow_id
+    return resp.json()["id"]
 
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    print("Building MatchMind RAG flow…")
-    flow_json = build_flow_json()
+    parser = argparse.ArgumentParser(description="Upload MatchMind RAG flow to Langflow")
+    parser.add_argument("--url",   default=DEFAULT_URL,   help=f"Langflow server URL (default: {DEFAULT_URL})")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"LLM model name (default: {DEFAULT_MODEL})")
+    args = parser.parse_args()
 
-    # Save a local copy for reference / manual import
-    with open("matchmind_flow.json", "w") as f:
-        json.dump(flow_json, f, indent=2)
-    print("Saved matchmind_flow.json (can also be imported via Langflow UI)")
+    print(f"Building MatchMind RAG flow (model: {args.model})…")
+    flow = build_flow(model=args.model, collection=DEFAULT_COLL, db_path=DEFAULT_DB)
 
-    print(f"Uploading to {LANGFLOW_URL}…")
+    # Always save a local copy — useful for manual import or version control
+    out_path = os.path.join(os.path.dirname(__file__), "matchmind_flow.json")
+    with open(out_path, "w") as f:
+        json.dump(flow, f, indent=2)
+    print(f"Saved {out_path}  (can be imported via Langflow UI → Import)")
+
+    print(f"\nUploading to {args.url} …")
     try:
-        flow_id = upload_flow(flow_json)
-        print(f"\nFlow created successfully!")
-        print(f"  Flow ID: {flow_id}")
-        print(f"\nAdd to backend/.env:")
-        print(f"  LANGFLOW_URL={LANGFLOW_URL}")
-        print(f"  LANGFLOW_FLOW_ID={flow_id}")
+        flow_id = upload(args.url, flow)
     except requests.ConnectionError:
-        print(f"\nCould not connect to Langflow at {LANGFLOW_URL}")
-        print("Make sure Langflow is running:  langflow run")
-        print("You can also import matchmind_flow.json manually via the Langflow UI.")
+        print(f"\nCould not connect to Langflow at {args.url}")
+        print("Make sure Langflow is running:")
+        print("  docker compose up langflow   (Docker)")
+        print("  langflow run                 (local)")
+        print(f"\nOr import {out_path} manually via the Langflow UI.")
         sys.exit(1)
     except Exception as e:
-        print(f"Upload failed: {e}")
-        print("The matchmind_flow.json file was saved — import it via the Langflow UI.")
+        print(f"\nUpload failed: {e}")
+        print(f"You can still import {out_path} manually via the Langflow UI.")
         sys.exit(1)
+
+    print(f"\nFlow created!")
+    print(f"  Flow ID : {flow_id}")
+    print(f"\nAdd these to your .env:")
+    print(f"  LANGFLOW_URL={args.url}")
+    print(f"  LANGFLOW_FLOW_ID={flow_id}")
+    print(f"\nThen restart the app:  docker compose restart app")
 
 
 if __name__ == "__main__":
