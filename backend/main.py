@@ -48,6 +48,8 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[dict]
     via: str
+    match_info: dict | None = None   # extracted match metadata (VAR only)
+    viz_data: dict | None = None     # player-position frames for pitch view (VAR only)
 
 
 # ── routes ───────────────────────────────────────────────────────────────────────
@@ -102,7 +104,13 @@ async def chat(req: ChatRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     result = await answer(req.message, req.incident_type)
-    return ChatResponse(**result)
+    return ChatResponse(
+        answer=result["answer"],
+        sources=result.get("sources", []),
+        via=result.get("via", "direct"),
+        match_info=result.get("match_info"),
+        viz_data=result.get("viz_data"),
+    )
 
 
 @app.get("/")

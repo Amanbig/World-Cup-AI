@@ -1,27 +1,14 @@
-export interface Source {
-  section: string;
-  page: string;
-  source: string;
-}
-
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  sources?: Source[];
-  incidentType?: string;
-  loading?: boolean;
-}
+import type { Message } from '../types'
 
 interface Props {
-  message: Message;
+  message: Message
 }
 
 const INCIDENT_BADGE: Record<string, string> = {
   var:      "📺 VAR",
   tactical: "🎯 Tactical",
   general:  "📖 Rule",
-};
+}
 
 export default function ChatMessage({ message }: Props) {
   if (message.role === "user") {
@@ -32,7 +19,7 @@ export default function ChatMessage({ message }: Props) {
         )}
         <p className="msg-text">{message.content}</p>
       </div>
-    );
+    )
   }
 
   if (message.loading) {
@@ -43,7 +30,7 @@ export default function ChatMessage({ message }: Props) {
           <span className="dot" /><span className="dot" /><span className="dot" />
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -64,5 +51,5 @@ export default function ChatMessage({ message }: Props) {
         )}
       </div>
     </div>
-  );
+  )
 }
