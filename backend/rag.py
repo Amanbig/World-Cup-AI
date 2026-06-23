@@ -141,7 +141,7 @@ def _build_prompt(query: str, chunks: list[dict], incident_type: str) -> str:
     return f"{prefix}\n\nRelevant rules from FIFA Laws of the Game:\n\n{context}\n\nQuestion: {query}"
 
 
-# ── LLM calls ───────────────────────────────────────────────────────────────────
+# ── LLM calls (batch) ───────────────────────────────────────────────────────────
 
 async def _llm(system: str, user: str) -> str:
     if LLM_PROVIDER == "watsonx":
@@ -191,6 +191,60 @@ async def _call_ollama(system: str, user: str) -> str:
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"]
+
+
+# ── LLM streaming ────────────────────────────────────────────────────────────────
+
+async def _stream_openai(system: str, user: str):
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    stream = await client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        temperature=0.3,
+        max_tokens=2048,
+        stream=True,
+    )
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
+
+
+async def _stream_ollama(system: str, user: str):
+    async with httpx.AsyncClient(timeout=120) as client:
+        async with client.stream(
+            "POST",
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                "stream": True,
+            },
+        ) as resp:
+            async for line in resp.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    content = data.get("message", {}).get("content", "")
+                    if content:
+                        yield content
+                except json.JSONDecodeError:
+                    pass
+
+
+async def _stream_llm(system: str, user: str):
+    """Yield text chunks from whichever LLM is configured."""
+    if LLM_PROVIDER == "ollama":
+        async for chunk in _stream_ollama(system, user):
+            yield chunk
+    elif LLM_PROVIDER == "watsonx":
+        # WatsonX batch → emit as single chunk
+        yield await _call_watsonx(system, user)
+    else:
+        async for chunk in _stream_openai(system, user):
+            yield chunk
 
 
 # ── JSON parsing for VAR responses ──────────────────────────────────────────────
@@ -245,6 +299,65 @@ async def _call_langflow(query: str, incident_type: str) -> dict:
 
 
 # ── public API ───────────────────────────────────────────────────────────────────
+
+async def stream_answer(query: str, incident_type: str = "general"):
+    """
+    Async generator yielding SSE lines.
+      data: {"type":"chunk","text":"..."}
+      data: {"type":"done","sources":[...],"match_info":...,"viz_data":...}
+      data: {"type":"error","message":"..."}
+    """
+    def sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj)}\n\n"
+
+    if LANGFLOW_URL and LANGFLOW_FLOW_ID:
+        result = await _call_langflow(query, incident_type)
+        yield sse({"type": "chunk", "text": result["answer"]})
+        yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
+        return
+
+    try:
+        chunks = retrieve(query)
+    except Exception as e:
+        yield sse({"type": "chunk", "text": f"Knowledge base not ready — please ingest a FIFA PDF first. ({e})"})
+        yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
+        return
+
+    sources = [{"section": c["section"], "page": c["page"], "source": c["source"]} for c in chunks]
+
+    if incident_type == "var":
+        # VAR needs full JSON before we can parse — collect, parse, then stream the answer text
+        context = "\n\n".join(
+            f"[Source {i+1}] Section: {c['section']} | Page: {c['page']}\n{c['text']}"
+            for i, c in enumerate(chunks)
+        )
+        user_msg = (
+            f"Relevant FIFA rules context:\n\n{context}\n\n"
+            f"VAR decision question: {query}"
+        )
+        raw_parts = []
+        async for chunk in _stream_llm(SYSTEM_VAR, user_msg):
+            raw_parts.append(chunk)
+        raw = "".join(raw_parts)
+        parsed = _parse_var_response(raw)
+
+        # Stream the answer word by word for a natural typewriter feel
+        words = parsed["answer"].split(" ")
+        for i, word in enumerate(words):
+            yield sse({"type": "chunk", "text": word + ("" if i == len(words) - 1 else " ")})
+
+        yield sse({
+            "type": "done",
+            "sources": sources,
+            "match_info": parsed.get("match"),
+            "viz_data": parsed.get("visualization"),
+        })
+    else:
+        user_msg = _build_prompt(query, chunks, incident_type)
+        async for chunk in _stream_llm(SYSTEM_GENERAL, user_msg):
+            yield sse({"type": "chunk", "text": chunk})
+        yield sse({"type": "done", "sources": sources, "match_info": None, "viz_data": None})
+
 
 async def answer(query: str, incident_type: str = "general") -> dict:
     """

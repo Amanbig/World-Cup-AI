@@ -338,6 +338,13 @@ body { background: var(--pitch); color: var(--text); font-family: 'Inter', syste
 .msg-avatar { font-size: 1.1rem; flex-shrink: 0; width: 28px; height: 28px; background: var(--pitch-card); border: 1px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 .msg-bubble { background: var(--pitch-card); border: 1px solid var(--border); border-radius: 3px 14px 14px 14px; padding: 10px 14px; max-width: calc(100% - 40px); }
 .msg-bubble .msg-text { font-size: 0.86rem; line-height: 1.65; white-space: pre-wrap; }
+/* Blinking cursor appended while streaming */
+.msg-bubble.streaming .msg-text::after {
+  content: '▍'; display: inline-block;
+  color: var(--accent); animation: caret 0.7s steps(1) infinite;
+  margin-left: 1px; vertical-align: middle;
+}
+@keyframes caret { 0%,100%{opacity:1} 50%{opacity:0} }
 .msg-bubble.loading { display: flex; gap: 5px; align-items: center; padding: 12px 15px; }
 .dot { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; animation: bounce 1.2s infinite; }
 .dot:nth-child(2) { animation-delay:.2s } .dot:nth-child(3) { animation-delay:.4s }

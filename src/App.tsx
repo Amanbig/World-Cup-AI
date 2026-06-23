@@ -76,59 +76,78 @@ export default function App() {
     setInput("");
 
     const userMsg: Message = { id: makeId(), role: "user", content: text, incidentType };
-    const loadingMsg: Message = { id: makeId(), role: "assistant", content: "", loading: true };
-    setMessages((prev) => [...prev, userMsg, loadingMsg]);
+    const assistantId = makeId();
+    setMessages((prev) => [...prev, userMsg, { id: assistantId, role: "assistant", content: "", loading: true }]);
     setLoading(true);
 
     try {
-      const res = await fetch(`${API}/api/chat`, {
+      const res = await fetch(`${API}/api/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, incident_type: incidentType }),
       });
-      const data = await res.json();
 
-      // Update sidebar if VAR mode returned match/viz data
-      if (incidentType === "var") {
-        if (data.match_info) {
-          setMatchInfo((prev) => ({
-            home_team: data.match_info.home_team ?? prev.home_team,
-            away_team: data.match_info.away_team ?? prev.away_team,
-            minute:    data.match_info.minute    ?? prev.minute,
-            incident:  data.match_info.incident  ?? prev.incident,
-          }));
+      if (!res.ok || !res.body) throw new Error("Stream error");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let accumulated = "";
+
+      // Switch loading → streaming so text starts appearing with cursor
+      setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, loading: false, streaming: true } : m));
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const evt = JSON.parse(raw);
+            if (evt.type === "chunk") {
+              accumulated += evt.text;
+              const snap = accumulated;
+              setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: snap } : m));
+            } else if (evt.type === "done") {
+              if (incidentType === "var") {
+                if (evt.match_info) {
+                  setMatchInfo((prev) => ({
+                    home_team: evt.match_info.home_team ?? prev.home_team,
+                    away_team: evt.match_info.away_team ?? prev.away_team,
+                    minute:    evt.match_info.minute    ?? prev.minute,
+                    incident:  evt.match_info.incident  ?? prev.incident,
+                  }));
+                }
+                if (evt.viz_data) setVizData(evt.viz_data);
+                setMatchEvents((prev) => [...prev, {
+                  id: makeId(),
+                  minute: evt.match_info?.minute ?? null,
+                  type: "var",
+                  description: evt.match_info?.incident
+                    ? `VAR: ${evt.match_info.incident.charAt(0).toUpperCase() + evt.match_info.incident.slice(1)}`
+                    : "VAR review",
+                }]);
+              }
+              setMessages((prev) => prev.map((m) =>
+                m.id === assistantId ? { ...m, content: accumulated, sources: evt.sources ?? [], streaming: false } : m
+              ));
+            }
+          } catch { /* ignore malformed SSE lines */ }
         }
-        if (data.viz_data) {
-          setVizData(data.viz_data);
-        }
-        // Add event to timeline
-        setMatchEvents((prev) => [
-          ...prev,
-          {
-            id: makeId(),
-            minute: data.match_info?.minute ?? null,
-            type: "var",
-            description: data.match_info?.incident
-              ? `VAR: ${data.match_info.incident.charAt(0).toUpperCase() + data.match_info.incident.slice(1)}`
-              : "VAR review",
-          },
-        ]);
       }
-
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        {
-          id: makeId(),
-          role: "assistant",
-          content: data.answer ?? "No answer returned.",
-          sources: data.sources ?? [],
-        },
-      ]);
     } catch {
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        { id: makeId(), role: "assistant", content: "Could not reach the backend. Is it running on port 8000?" },
-      ]);
+      setMessages((prev) => prev.map((m) =>
+        m.id === assistantId
+          ? { ...m, loading: false, content: "Could not reach the backend. Is it running on port 8000?" }
+          : m
+      ));
     } finally {
       setLoading(false);
     }

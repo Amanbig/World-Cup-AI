@@ -16,12 +16,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv()
 
 from ingest import get_collection_stats, ingest
-from rag import answer
+from rag import answer, stream_answer
 
 # ── app setup ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,18 @@ async def chat(req: ChatRequest):
         via=result.get("via", "direct"),
         match_info=result.get("match_info"),
         viz_data=result.get("viz_data"),
+    )
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(req: ChatRequest):
+    """Streaming version of /api/chat — sends SSE chunks as the LLM generates."""
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    return StreamingResponse(
+        stream_answer(req.message, req.incident_type),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

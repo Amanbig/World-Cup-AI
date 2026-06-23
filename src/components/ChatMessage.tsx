@@ -36,7 +36,7 @@ export default function ChatMessage({ message }: Props) {
   return (
     <div className="msg msg-assistant">
       <div className="msg-avatar">⚽</div>
-      <div className="msg-bubble">
+      <div className={`msg-bubble${message.streaming ? " streaming" : ""}`}>
         <p className="msg-text">{message.content}</p>
         {message.sources && message.sources.length > 0 && (
           <div className="msg-sources">

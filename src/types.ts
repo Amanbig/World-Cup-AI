@@ -51,4 +51,5 @@ export interface Message {
   sources?: Source[]
   incidentType?: string
   loading?: boolean
+  streaming?: boolean
 }
