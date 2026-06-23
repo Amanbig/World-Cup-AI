@@ -63,8 +63,15 @@ body {
 .incident-selector {
   display: flex; align-items: center; gap: 8px; padding: 8px 20px;
   background: var(--surface); border-bottom: 1px solid var(--border);
-  flex-shrink: 0; overflow-x: auto;
+  flex-shrink: 0;
+  /* NO overflow here — dropdown must not be clipped */
+  position: relative;
 }
+/* Buttons scroll independently so they don't clip the dropdown */
+.incident-btns {
+  display: flex; gap: 8px; overflow-x: auto; flex: 1;
+}
+.incident-btns::-webkit-scrollbar { display: none; }
 .incident-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 16px; border-radius: 999px;

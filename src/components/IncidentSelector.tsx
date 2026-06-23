@@ -34,19 +34,22 @@ export default function IncidentSelector({ selected, onChange, onMatchSelect, se
 
   return (
     <div className="incident-selector">
-      {TYPES.map((t) => (
-        <button
-          key={t.id}
-          className={`incident-btn${selected === t.id ? " active" : ""}`}
-          onClick={() => onChange(t.id)}
-          title={t.desc}
-        >
-          <span className="incident-icon">{t.icon}</span>
-          <span className="incident-label">{t.label}</span>
-        </button>
-      ))}
+      {/* Scrollable buttons — isolated overflow so dropdown isn't clipped */}
+      <div className="incident-btns">
+        {TYPES.map((t) => (
+          <button
+            key={t.id}
+            className={`incident-btn${selected === t.id ? " active" : ""}`}
+            onClick={() => onChange(t.id)}
+            title={t.desc}
+          >
+            <span className="incident-icon">{t.icon}</span>
+            <span className="incident-label">{t.label}</span>
+          </button>
+        ))}
+      </div>
 
-      {/* Match selector — right side */}
+      {/* Match selector — lives outside the overflow container */}
       <div className="match-selector" ref={ref}>
         <button
           className={`match-sel-btn${open ? " open" : ""}${activeMatch ? " has-match" : ""}`}
