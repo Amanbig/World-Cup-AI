@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+*.md
+backend/chroma_db
+backend/__pycache__
+backend/*.pyc
+langflow

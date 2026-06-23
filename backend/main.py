@@ -16,7 +16,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv()
@@ -36,6 +37,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Serve built frontend (production Docker build) ───────────────────────────────
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 # ── models ───────────────────────────────────────────────────────────────────────
@@ -128,4 +132,15 @@ async def chat_stream(req: ChatRequest):
 
 @app.get("/")
 def root():
+    if (STATIC_DIR / "index.html").exists():
+        return FileResponse(str(STATIC_DIR / "index.html"))
     return {"service": "MatchMind API", "docs": "/docs"}
+
+
+# ── SPA catch-all: must be registered AFTER all API routes ───────────────────────
+if STATIC_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        return FileResponse(str(STATIC_DIR / "index.html"))

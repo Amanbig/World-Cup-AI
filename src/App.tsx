@@ -10,7 +10,8 @@ import "./App.css";
 
 type IncidentType = "var" | "tactical" | "general";
 
-const API = "http://localhost:8000";
+// In dev, Vite proxies /api → localhost:8000. In production, same origin.
+const API = import.meta.env.VITE_API_URL ?? "";
 
 const SUGGESTED: Record<IncidentType, string[]> = {
   var: [

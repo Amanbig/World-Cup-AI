@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+
+  # ── MatchMind app (FastAPI + built React frontend) ──────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Langflow runs as a sibling service — override URL for Docker networking
+      - LANGFLOW_URL=http://langflow:7860
+      # Allow requests from the browser (same-origin in prod, or override for dev)
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:8000
+    volumes:
+      # Persist ChromaDB vector store between restarts
+      - chroma_data:/app/chroma_db
+    depends_on:
+      langflow:
+        condition: service_healthy
+    restart: unless-stopped
+
+
+  # ── Langflow visual RAG pipeline editor ─────────────────────────────────────
+  langflow:
+    image: langflowai/langflow:latest
+    ports:
+      - "7860:7860"
+    environment:
+      - LANGFLOW_AUTO_LOGIN=true          # skip login for local dev
+      - LANGFLOW_DATABASE_URL=sqlite:////data/langflow.db
+      - LANGFLOW_CONFIG_DIR=/data
+    volumes:
+      - langflow_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+    restart: unless-stopped
+
+
+volumes:
+  chroma_data:
+  langflow_data:
