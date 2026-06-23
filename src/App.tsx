@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ChatMessage from "./components/ChatMessage";
 import IncidentSelector from "./components/IncidentSelector";
 import MatchSidebar from "./components/MatchSidebar";
+import PitchView from "./components/PitchView";
 import type { Message, MatchInfo, MatchEvent, VizData } from "./types";
 import "./App.css";
 
@@ -197,74 +198,102 @@ export default function App() {
       {/* ── Mode selector ──────────────────────────────────────── */}
       <IncidentSelector selected={incidentType} onChange={setIncidentType} />
 
-      {/* ── Body: split for VAR, full-width for other modes ───── */}
-      <div className={`body-area${incidentType === "var" ? " var-mode" : ""}`}>
+      {/* ── Body ───────────────────────────────────────────────── */}
+      {incidentType === "var" ? (
+        /* VAR mode: 3-column — scoreboard | pitch | chat */
+        <div className="var-layout">
 
-        {/* Left sidebar — VAR mode only */}
-        {incidentType === "var" && (
+          {/* Left: scoreboard + events */}
           <MatchSidebar
             matchInfo={matchInfo}
             events={matchEvents}
-            vizData={vizData}
             onMatchInfoChange={updateMatchInfo}
           />
-        )}
 
-        {/* Chat column */}
-        <div className="chat-column">
-          <main className="chat-area">
-            {isEmpty ? (
-              <div className="empty-state">
-                <p className="empty-headline">What do you want to understand?</p>
-                <p className="empty-sub">Pick a question below or type your own</p>
-                <div className="suggestions">
-                  {SUGGESTED[incidentType].map((s) => (
-                    <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              messages.map((m) => <ChatMessage key={m.id} message={m} />)
-            )}
-            <div ref={bottomRef} />
-          </main>
-
-          {/* Input bar */}
-          <footer className="input-bar">
-            <input
-              className="input-field"
-              placeholder={
-                incidentType === "var"
-                  ? "Describe the VAR incident, teams, and minute…"
-                  : incidentType === "tactical"
-                  ? "Ask about a formation, substitution, or pressing system…"
-                  : "Ask any FIFA rule question…"
-              }
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
-              disabled={loading}
+          {/* Center: pitch fills full height */}
+          <div className="var-pitch-col">
+            <PitchView
+              vizData={vizData}
+              homeTeam={matchInfo.home_team || "Home"}
+              awayTeam={matchInfo.away_team || "Away"}
             />
-            <button
-              className="send-btn"
-              onClick={() => sendMessage(input)}
-              disabled={loading || !input.trim()}
-            >
-              {loading ? "…" : "Send"}
-            </button>
-            <button
-              className="upload-btn"
-              title="Upload a new FIFA PDF"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? "⏳" : "📄"}
-            </button>
-          </footer>
+          </div>
+
+          {/* Right: chat */}
+          <div className="chat-column">
+            <main className="chat-area">
+              {isEmpty ? (
+                <div className="empty-state">
+                  <p className="empty-headline">What do you want to understand?</p>
+                  <p className="empty-sub">Pick a VAR incident to analyse</p>
+                  <div className="suggestions">
+                    {SUGGESTED.var.map((s) => (
+                      <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                messages.map((m) => <ChatMessage key={m.id} message={m} />)
+              )}
+              <div ref={bottomRef} />
+            </main>
+            <footer className="input-bar">
+              <input
+                className="input-field"
+                placeholder="Describe the VAR incident, teams, and minute…"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
+                disabled={loading}
+              />
+              <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
+                {loading ? "…" : "Send"}
+              </button>
+              <button className="upload-btn" title="Upload FIFA PDF" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                {uploading ? "⏳" : "📄"}
+              </button>
+            </footer>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Tactical / General: full-width chat */
+        <div className="body-area">
+          <div className="chat-column">
+            <main className="chat-area">
+              {isEmpty ? (
+                <div className="empty-state">
+                  <p className="empty-headline">What do you want to understand?</p>
+                  <p className="empty-sub">Pick a question below or type your own</p>
+                  <div className="suggestions">
+                    {SUGGESTED[incidentType].map((s) => (
+                      <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                messages.map((m) => <ChatMessage key={m.id} message={m} />)
+              )}
+              <div ref={bottomRef} />
+            </main>
+            <footer className="input-bar">
+              <input
+                className="input-field"
+                placeholder={incidentType === "tactical" ? "Ask about a formation, substitution, or pressing system…" : "Ask any FIFA rule question…"}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
+                disabled={loading}
+              />
+              <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
+                {loading ? "…" : "Send"}
+              </button>
+              <button className="upload-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                {uploading ? "⏳" : "📄"}
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

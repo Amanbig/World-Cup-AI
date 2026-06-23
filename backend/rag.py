@@ -71,46 +71,60 @@ Explain rules, tactical shifts, and football concepts clearly.
 Always cite the specific Law or section (e.g. "Law 11 – Offside").
 Base your answer on the retrieved context below. Do not invent rules."""
 
-# VAR system prompt asks for a structured JSON response that includes both the
-# explanation text AND player-position data for the pitch visualisation.
+# VAR system prompt — portrait pitch coords, jersey numbers, player names.
 SYSTEM_VAR = """You are MatchMind, an expert FIFA Laws of the Game companion.
-For this VAR decision query, return ONLY a valid JSON object — no markdown fences, no preamble.
+For this VAR decision query return ONLY a valid JSON object — no markdown, no preamble.
 
-Schema:
+PORTRAIT PITCH COORDINATE SYSTEM (very important — read carefully):
+- The pitch is displayed VERTICALLY (portrait): x = 0–68 (left→right), y = 0–105 (top→bottom)
+- AWAY team defends the TOP goal (y=0). Away players occupy y = 0–52.
+    Away GK:        x≈34, y≈5
+    Away defenders: y≈15–25, spread x≈10–58
+    Away midfield:  y≈28–40, spread x≈10–58
+    Away forwards:  y≈42–52, spread x≈10–58
+- HOME team defends the BOTTOM goal (y=105). Home players occupy y = 53–105.
+    Home forwards:  y≈55–65, spread x≈10–58
+    Home midfield:  y≈65–78, spread x≈10–58
+    Home defenders: y≈80–92, spread x≈10–58
+    Home GK:        x≈34, y≈100
+- offside_y is the Y-coordinate of the HORIZONTAL offside line (not x).
+- incident_point uses the same portrait (x, y) system.
+
+JSON schema:
 {
-  "answer": "<detailed plain-language explanation citing the specific FIFA Law>",
+  "answer": "<detailed explanation citing the specific FIFA Law, e.g. Law 11>",
   "match": {
-    "home_team": "<team name if mentioned, else null>",
-    "away_team": "<team name if mentioned, else null>",
+    "home_team": "<team name or null>",
+    "away_team": "<team name or null>",
     "minute": <integer or null>,
-    "incident": "<offside|handball|foul|penalty|generic>"
+    "incident": "offside" | "handball" | "foul" | "penalty" | "generic"
   },
   "visualization": {
-    "title": "<one-line description of the play, e.g. 'Offside trap — attacker caught behind last defender'>",
+    "title": "<one-line scene description>",
     "frames": [
       {
-        "label": "<short label, e.g. 'Before pass'>",
-        "ball": {"x": <0-105>, "y": <0-68>},
-        "home": [{"id": 1, "x": <0-105>, "y": <0-68>, "pos": "<ST|CM|LB|etc>"}],
-        "away": [{"id": 1, "x": <0-105>, "y": <0-68>, "pos": "<CB|GK|etc>"}]
+        "label": "<frame label, e.g. 'Before pass' / 'At offside moment'>",
+        "ball": {"x": <0-68>, "y": <0-105>},
+        "home": [
+          {"id": 1, "x": <0-68>, "y": <0-105>, "pos": "ST", "num": 9, "name": "Surname"}
+        ],
+        "away": [
+          {"id": 1, "x": <0-68>, "y": <0-105>, "pos": "CB", "num": 4, "name": "Surname"}
+        ]
       }
     ],
-    "offside_x": <x-coordinate of offside line or null>,
-    "incident_point": {"x": <0-105>, "y": <0-68>} or null
+    "offside_y": <y-coord of horizontal offside line, or null>,
+    "incident_point": {"x": <0-68>, "y": <0-105>} or null
   }
 }
 
-COORDINATE SYSTEM:
-- x=0 is the LEFT goal line, x=105 is the RIGHT goal line
-- y=0 is the TOP touchline, y=68 is the BOTTOM touchline
-- Home team attacks LEFT → RIGHT (home players cluster around x=30-60)
-- Away team defends their RIGHT goal (away defenders cluster around x=55-80, GK at x=90-103)
-- Include 3-6 players per team — only those relevant to the incident
-- Provide 2-4 frames showing the progression of the play
-
-For offside: show the last defender's x as offside_x; frame 1 = before pass (attacker behind line), frame 2 = at pass (attacker beyond line).
-For handball: show ball trajectory across frames; incident_point = where contact occurred.
-For foul: incident_point = foul location; show attacker + fouling defender at that spot."""
+RULES:
+- Include 4–6 players per team showing a realistic formation shape.
+- Use REAL player names/numbers if the teams are well-known (e.g. World Cup 2022 Final).
+- For offside: frame 1 = before pass (attacker onside), frame 2 = at pass (attacker beyond offside_y line).
+- For handball: show ball trajectory across frames; incident_point = contact location.
+- For foul: incident_point = foul spot; show attacker + defender at that location.
+- Keep player ids STABLE across frames so CSS transitions animate the movement correctly."""
 
 INCIDENT_PREFIXES = {
     "tactical": "This is a TACTICAL ANALYSIS question. Explain the tactical reasoning and expected outcome.",

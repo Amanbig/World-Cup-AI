@@ -1,9 +1,90 @@
 import { useEffect, useRef, useState } from 'react'
-import type { VizData, PitchFrame } from '../types'
+import type { VizData, PlayerDot } from '../types'
 
-// Standard pitch dimensions (metres used as SVG units)
-const W = 105
-const H = 68
+// Portrait pitch: 68m wide × 105m tall
+const PW = 68
+const PH = 105
+
+function pct(x: number, y: number) {
+  return { left: `${(x / PW) * 100}%`, top: `${(y / PH) * 100}%` }
+}
+
+// Static SVG pitch markings — portrait orientation
+function PitchLines() {
+  const cx = PW / 2   // 34
+  const cy = PH / 2   // 52.5
+  return (
+    <svg
+      viewBox={`0 0 ${PW} ${PH}`}
+      preserveAspectRatio="none"
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+    >
+      {/* Boundary */}
+      <rect x={1} y={1} width={PW - 2} height={PH - 2}
+        fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={0.7} />
+      {/* Centre line (horizontal) */}
+      <line x1={1} y1={cy} x2={PW - 1} y2={cy}
+        stroke="rgba(255,255,255,0.55)" strokeWidth={0.7} />
+      {/* Centre circle */}
+      <circle cx={cx} cy={cy} r={9.15}
+        fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={0.7} />
+      <circle cx={cx} cy={cy} r={0.9} fill="rgba(255,255,255,0.55)" />
+
+      {/* TOP penalty area */}
+      <rect x={(PW - 40.3) / 2} y={1} width={40.3} height={16.5}
+        fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={0.7} />
+      {/* TOP 6-yard box */}
+      <rect x={(PW - 18.3) / 2} y={1} width={18.3} height={5.5}
+        fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={0.5} />
+      {/* TOP goal */}
+      <rect x={(PW - 7.32) / 2} y={0} width={7.32} height={1.5}
+        fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" strokeWidth={0.5} />
+      {/* TOP penalty spot */}
+      <circle cx={cx} cy={11} r={0.7} fill="rgba(255,255,255,0.55)" />
+      {/* TOP penalty arc */}
+      <path d={`M ${cx - 9} 17.5 A 9.15 9.15 0 0 0 ${cx + 9} 17.5`}
+        fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={0.6} />
+
+      {/* BOTTOM penalty area */}
+      <rect x={(PW - 40.3) / 2} y={PH - 17.5} width={40.3} height={16.5}
+        fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={0.7} />
+      {/* BOTTOM 6-yard box */}
+      <rect x={(PW - 18.3) / 2} y={PH - 6.5} width={18.3} height={5.5}
+        fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={0.5} />
+      {/* BOTTOM goal */}
+      <rect x={(PW - 7.32) / 2} y={PH - 1.5} width={7.32} height={1.5}
+        fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" strokeWidth={0.5} />
+      {/* BOTTOM penalty spot */}
+      <circle cx={cx} cy={PH - 11} r={0.7} fill="rgba(255,255,255,0.55)" />
+      {/* BOTTOM penalty arc */}
+      <path d={`M ${cx - 9} ${PH - 17.5} A 9.15 9.15 0 0 1 ${cx + 9} ${PH - 17.5}`}
+        fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={0.6} />
+    </svg>
+  )
+}
+
+interface DotProps {
+  player: PlayerDot
+  team: 'home' | 'away'
+  highlighted?: boolean
+}
+
+function Dot({ player, team, highlighted }: DotProps) {
+  const style = {
+    ...pct(player.x, player.y),
+    transition: 'left 0.7s cubic-bezier(.4,0,.2,1), top 0.7s cubic-bezier(.4,0,.2,1)',
+  }
+  return (
+    <div
+      key={`${team}-${player.id}`}
+      className={`pd pd-${team}${highlighted ? ' pd-highlight' : ''}`}
+      style={style}
+    >
+      <span className="pd-num">{player.num ?? player.pos}</span>
+      {player.name && <span className="pd-name">{player.name}</span>}
+    </div>
+  )
+}
 
 interface Props {
   vizData: VizData | null
@@ -11,176 +92,135 @@ interface Props {
   awayTeam: string
 }
 
-function Dot({ x, y, fill, label }: { x: number; y: number; fill: string; label: string }) {
-  return (
-    <g>
-      <circle cx={x} cy={y} r={2.8} fill={fill} stroke="white" strokeWidth={0.5} />
-      <text x={x} y={y - 3.8} textAnchor="middle" fontSize={2.8} fill="rgba(255,255,255,0.9)" fontWeight="bold">
-        {label}
-      </text>
-    </g>
-  )
-}
-
-function PitchMarkings() {
-  const cy = H / 2
-  return (
-    <>
-      {/* Grass stripes */}
-      {[0,1,2,3,4,5,6].map(i => (
-        <rect key={i} x={i * 15} y={0} width={15} height={H}
-          fill={i % 2 === 0 ? '#2d5a1b' : '#326520'} />
-      ))}
-      {/* Outer boundary */}
-      <rect x={0} y={0} width={W} height={H} fill="none" stroke="white" strokeWidth={0.6} />
-      {/* Centre line */}
-      <line x1={W/2} y1={0} x2={W/2} y2={H} stroke="white" strokeWidth={0.5} />
-      {/* Centre circle */}
-      <circle cx={W/2} cy={cy} r={9.15} fill="none" stroke="white" strokeWidth={0.5} />
-      <circle cx={W/2} cy={cy} r={0.6} fill="white" />
-      {/* Left penalty area */}
-      <rect x={0} y={(H-40.3)/2} width={16.5} height={40.3} fill="none" stroke="white" strokeWidth={0.5} />
-      {/* Left goal area */}
-      <rect x={0} y={(H-18.3)/2} width={5.5} height={18.3} fill="none" stroke="white" strokeWidth={0.5} />
-      {/* Left goal */}
-      <rect x={-1.5} y={(H-7.32)/2} width={1.5} height={7.32} fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth={0.5} />
-      {/* Left penalty spot */}
-      <circle cx={11} cy={cy} r={0.5} fill="white" />
-      {/* Right penalty area */}
-      <rect x={W-16.5} y={(H-40.3)/2} width={16.5} height={40.3} fill="none" stroke="white" strokeWidth={0.5} />
-      {/* Right goal area */}
-      <rect x={W-5.5} y={(H-18.3)/2} width={5.5} height={18.3} fill="none" stroke="white" strokeWidth={0.5} />
-      {/* Right goal */}
-      <rect x={W} y={(H-7.32)/2} width={1.5} height={7.32} fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth={0.5} />
-      {/* Right penalty spot */}
-      <circle cx={W-11} cy={cy} r={0.5} fill="white" />
-    </>
-  )
-}
-
 export default function PitchView({ vizData, homeTeam, awayTeam }: Props) {
   const [frameIdx, setFrameIdx] = useState(0)
-  const [playing, setPlaying] = useState(true)
-  // Store interpolated positions for smooth animation
-  const [displayed, setDisplayed] = useState<PitchFrame | null>(null)
-  const animRef = useRef<ReturnType<typeof setInterval>>()
+  const [playing, setPlaying] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval>>()
 
-  // Reset on new vizData
   useEffect(() => {
+    clearInterval(intervalRef.current)
     setFrameIdx(0)
-    setDisplayed(vizData?.frames?.[0] ?? null)
-    setPlaying(true)
+    // Auto-play new viz after a brief settle delay
+    if (vizData?.frames && vizData.frames.length > 1) {
+      const t = setTimeout(() => setPlaying(true), 500)
+      return () => clearTimeout(t)
+    }
+    setPlaying(false)
   }, [vizData])
 
-  // Auto-cycle frames
   useEffect(() => {
-    if (!vizData?.frames?.length || !playing) return
-    animRef.current = setInterval(() => {
+    if (!playing || !vizData?.frames?.length) return
+    intervalRef.current = setInterval(() => {
       setFrameIdx(i => {
-        const next = (i + 1) % vizData.frames.length
-        setDisplayed(vizData.frames[next])
+        const next = i + 1
+        if (next >= vizData!.frames.length) {
+          clearInterval(intervalRef.current)
+          setPlaying(false)
+          return i
+        }
         return next
       })
-    }, 1600)
-    return () => clearInterval(animRef.current)
-  }, [vizData, playing])
+    }, 1500)
+    return () => clearInterval(intervalRef.current)
+  }, [playing, vizData])
 
-  // Jump to frame on manual click
-  function goToFrame(i: number) {
-    setPlaying(false)
-    clearInterval(animRef.current)
-    setFrameIdx(i)
-    setDisplayed(vizData!.frames[i])
-  }
-
-  if (!vizData) {
+  if (!vizData?.frames?.length) {
     return (
-      <div className="pitch-empty">
-        <div className="pitch-empty-inner">
-          <span>⚽</span>
-          <p>Ask a VAR question to see the play animated here</p>
+      <div className="pitch-wrap">
+        <div className="pitch-canvas pitch-empty">
+          <PitchLines />
+          <div className="pitch-empty-msg">
+            <span>📺</span>
+            <p>Ask a VAR question — the play animates here</p>
+          </div>
+        </div>
+        <div className="pitch-legend">
+          <span className="leg-home">⬤ {homeTeam || 'Home'}</span>
+          <span className="leg-ball">⬤ Ball</span>
+          <span className="leg-away">⬤ {awayTeam || 'Away'}</span>
         </div>
       </div>
     )
   }
 
-  const frame = displayed ?? vizData.frames[0]
+  const frames = vizData.frames
+  const frame  = frames[frameIdx]
+  const total  = frames.length
 
   return (
-    <div className="pitch-wrapper">
-      {/* Team legend */}
-      <div className="pitch-legend">
-        <span className="legend-home">● {homeTeam || 'Home'}</span>
-        <span className="legend-ball">⬤ Ball</span>
-        <span className="legend-away">● {awayTeam || 'Away'}</span>
+    <div className="pitch-wrap">
+      {/* Team names above/below the pitch */}
+      <div className="pitch-team-label away-label">
+        <span className="ptl-dot away" />
+        {awayTeam || 'Away'}
       </div>
 
-      <svg viewBox={`-2 -1 ${W+4} ${H+2}`} className="pitch-svg">
-        <PitchMarkings />
+      <div className="pitch-canvas">
+        <PitchLines />
 
-        {/* Offside line */}
-        {vizData.offside_x != null && (
-          <>
-            <line
-              x1={vizData.offside_x} y1={0}
-              x2={vizData.offside_x} y2={H}
-              stroke="#fbbf24" strokeWidth={0.9} strokeDasharray="3,1.5" opacity={0.9}
-            />
-            <text x={vizData.offside_x + 1} y={4} fontSize={3} fill="#fbbf24" opacity={0.9}>
-              OFFSIDE LINE
-            </text>
-          </>
+        {/* Offside line (horizontal) */}
+        {vizData.offside_y != null && (
+          <div className="offside-bar" style={{ top: `${(vizData.offside_y / PH) * 100}%` }}>
+            <span className="offside-tag">OFFSIDE</span>
+          </div>
         )}
 
-        {/* Incident marker */}
+        {/* Incident pulse */}
         {vizData.incident_point && (
-          <circle
-            cx={vizData.incident_point.x} cy={vizData.incident_point.y}
-            r={4} fill="none" stroke="#ef4444" strokeWidth={0.8}
-            strokeDasharray="2,1" opacity={0.85}
-          />
+          <div className="incident-ring" style={pct(vizData.incident_point.x, vizData.incident_point.y)} />
         )}
 
-        {/* Away team (red) */}
-        {frame.away.map(p => (
-          <Dot key={`away-${p.id}`} x={p.x} y={p.y} fill="#ef4444" label={p.pos} />
-        ))}
+        {/* Away team dots (top half — blue) */}
+        {frame.away.map(p => <Dot key={`away-${p.id}`} player={p} team="away" />)}
 
-        {/* Home team (green) */}
-        {frame.home.map(p => (
-          <Dot key={`home-${p.id}`} x={p.x} y={p.y} fill="#4ade80" label={p.pos} />
-        ))}
+        {/* Home team dots (bottom half — green) */}
+        {frame.home.map(p => <Dot key={`home-${p.id}`} player={p} team="home" />)}
 
         {/* Ball */}
-        <circle
-          cx={frame.ball.x} cy={frame.ball.y}
-          r={1.8} fill="white" stroke="#555" strokeWidth={0.4}
+        <div
+          className="ball-dot"
+          style={{ ...pct(frame.ball.x, frame.ball.y), transition: 'left 0.7s cubic-bezier(.4,0,.2,1), top 0.7s cubic-bezier(.4,0,.2,1)' }}
         />
-      </svg>
 
-      {/* Frame label */}
-      <div className="pitch-frame-bar">
-        <span className="pitch-frame-label">{frame.label}</span>
-        <button className="pitch-play-btn" onClick={() => setPlaying(p => !p)}>
-          {playing ? '⏸' : '▶'}
-        </button>
+        {/* Floating frame label */}
+        <div className="frame-label-float">{frame.label}</div>
       </div>
 
-      {/* Frame scrubber */}
-      {vizData.frames.length > 1 && (
-        <div className="pitch-scrubber">
-          {vizData.frames.map((f, i) => (
-            <button
-              key={i}
-              className={`scrub-dot${i === frameIdx ? ' active' : ''}`}
-              onClick={() => goToFrame(i)}
-              title={f.label}
-            />
-          ))}
-        </div>
-      )}
+      <div className="pitch-team-label home-label">
+        <span className="ptl-dot home" />
+        {homeTeam || 'Home'}
+      </div>
 
-      <p className="pitch-title">{vizData.title}</p>
+      {/* Controls */}
+      <div className="pitch-controls">
+        <div className="pitch-btns">
+          <button className="pc-btn" onClick={() => { setPlaying(false); setFrameIdx(i => Math.max(0, i - 1)) }} disabled={frameIdx === 0}>‹</button>
+          <button
+            className={`pc-btn play${playing ? ' on' : ''}`}
+            onClick={() => {
+              if (playing) { setPlaying(false) }
+              else { if (frameIdx === total - 1) setFrameIdx(0); setPlaying(true) }
+            }}
+          >
+            {playing ? '⏸' : '▶ Play'}
+          </button>
+          <button className="pc-btn" onClick={() => { setPlaying(false); setFrameIdx(i => Math.min(total - 1, i + 1)) }} disabled={frameIdx === total - 1}>›</button>
+        </div>
+        <div className="pc-pips">
+          {frames.map((_, i) => (
+            <button key={i} className={`pc-pip${i === frameIdx ? ' on' : ''}`} onClick={() => { setPlaying(false); setFrameIdx(i) }} title={frames[i].label} />
+          ))}
+          <span className="pc-count">{frameIdx + 1}/{total}</span>
+        </div>
+      </div>
+
+      <p className="pitch-title-text">{vizData.title}</p>
+
+      <div className="pitch-legend">
+        <span className="leg-home">⬤ {homeTeam || 'Home'}</span>
+        <span className="leg-ball">⬤ Ball</span>
+        <span className="leg-away">⬤ {awayTeam || 'Away'}</span>
+      </div>
     </div>
   )
 }
