@@ -238,20 +238,28 @@ export default function App() {
               <div ref={bottomRef} />
             </main>
             <footer className="input-bar">
-              <input
-                className="input-field"
-                placeholder="Describe the VAR incident, teams, and minute…"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
-                disabled={loading}
-              />
-              <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
-                {loading ? "…" : "Send"}
-              </button>
-              <button className="upload-btn" title="Upload FIFA PDF" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                {uploading ? "⏳" : "📄"}
-              </button>
+              <div className="input-bar-inner">
+                <input
+                  className="input-field"
+                  placeholder="Describe the VAR incident, teams, and minute…"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
+                  disabled={loading}
+                />
+                <button className="upload-btn" title="Upload FIFA PDF" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  {uploading
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  }
+                </button>
+                <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
+                  {loading
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                  }
+                </button>
+              </div>
             </footer>
           </div>
         </div>
@@ -276,20 +284,28 @@ export default function App() {
               <div ref={bottomRef} />
             </main>
             <footer className="input-bar">
-              <input
-                className="input-field"
-                placeholder={incidentType === "tactical" ? "Ask about a formation, substitution, or pressing system…" : "Ask any FIFA rule question…"}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
-                disabled={loading}
-              />
-              <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
-                {loading ? "…" : "Send"}
-              </button>
-              <button className="upload-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                {uploading ? "⏳" : "📄"}
-              </button>
+              <div className="input-bar-inner">
+                <input
+                  className="input-field"
+                  placeholder={incidentType === "tactical" ? "Ask about a formation, substitution, or pressing system…" : "Ask any FIFA rule question…"}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
+                  disabled={loading}
+                />
+                <button className="upload-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  {uploading
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  }
+                </button>
+                <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
+                  {loading
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                  }
+                </button>
+              </div>
             </footer>
           </div>
         </div>
