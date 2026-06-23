@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Header } from './components/Header';
 import { Timeline } from './components/Timeline';
 import { MomentumChart } from './components/MomentumChart';
@@ -6,12 +6,25 @@ import { TacticalBoard } from './components/TacticalBoard';
 import { VARCenter } from './components/VARCenter';
 import { AIAnalyst } from './components/AIAnalyst';
 import { Predictor } from './components/Predictor';
-import { Calendar, Users } from 'lucide-react';
+import { MatchSelector } from './components/MatchSelector';
+import { Calendar, Users, ArrowLeft } from 'lucide-react';
+import { fetchWC2026Matches, getLiveMatches } from './services/sportsDataService';
 import './index.css';
 
 function App() {
   const [currentMinute, setCurrentMinute] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [view, setView] = useState<'hub' | 'analysis'>('hub');
+
+  // Auto-switch to hub when no live match; stay in analysis if live match detected
+  useEffect(() => {
+    fetchWC2026Matches().then(matches => {
+      const live = getLiveMatches(matches);
+      // If a live WC 2026 match is on, user might still want the hub — keep default as hub
+      // Suppress unused — live count could drive future auto-load logic
+      void live;
+    });
+  }, []);
 
   const milestones = [
     { minute: 0,   title: 'Kickoff',         subtitle: 'Formations Neutral',       icon: '⚽' },
@@ -25,6 +38,10 @@ function App() {
     { minute: 118, title: 'Mbappe Hat-trick', subtitle: 'Handball Penalty (3-3)',   icon: '🇫🇷' },
   ];
 
+  if (view === 'hub') {
+    return <MatchSelector onLoadAnalysis={() => setView('analysis')} />;
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col bg-[#0B0F19] text-gray-100 font-sans selection:bg-neon-cyan/30">
 
@@ -37,6 +54,15 @@ function App() {
       />
 
       <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 md:px-10 py-8 flex flex-col gap-8">
+
+        {/* ── Back to Hub ── */}
+        <button
+          onClick={() => { setIsPlaying(false); setView('hub'); }}
+          className="self-start flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:border-white/20 text-xs font-semibold transition-all duration-200"
+        >
+          <ArrowLeft size={13} />
+          World Cup 2026 Hub
+        </button>
 
         {/* ── Timeline scrubber ── */}
         <Timeline currentMinute={currentMinute} setCurrentMinute={setCurrentMinute} />
