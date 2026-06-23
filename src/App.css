@@ -412,8 +412,15 @@ body {
 .chat-area::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 99px; }
 
 /* ── Empty state ───────────────────────────────────────────────────── */
-.empty-state { margin: auto; text-align: center; max-width: 440px; padding: 20px; }
-.empty-headline { font-size: 1.25rem; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+.empty-state { margin: auto; text-align: center; max-width: 460px; padding: 20px; }
+.empty-match-badge { margin-bottom: 10px; }
+.empty-match-year {
+  display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--gold);
+  background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.25);
+  padding: 3px 10px; border-radius: 999px;
+}
+.empty-headline { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; color: var(--text); }
 .empty-sub { color: var(--text-muted); font-size: 0.84rem; margin-bottom: 20px; }
 .suggestions { display: flex; flex-direction: column; gap: 8px; }
 .suggestion-chip {

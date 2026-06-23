@@ -4,6 +4,7 @@ import IncidentSelector from "./components/IncidentSelector";
 import MatchSidebar from "./components/MatchSidebar";
 import PitchView from "./components/PitchView";
 import type { Message, MatchInfo, MatchEvent, VizData } from "./types";
+import { HISTORICAL_MATCHES } from "./data/matches";
 import type { HistoricalMatch } from "./data/matches";
 import "./App.css";
 
@@ -264,17 +265,38 @@ export default function App() {
           {/* Right: chat */}
           <div className="chat-column">
             <main className="chat-area">
-              {isEmpty ? (
-                <div className="empty-state">
-                  <p className="empty-headline">What do you want to understand?</p>
-                  <p className="empty-sub">Pick a VAR incident to analyse</p>
-                  <div className="suggestions">
-                    {SUGGESTED.var.map((s) => (
-                      <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>{s}</button>
-                    ))}
+              {isEmpty ? (() => {
+                const activeMatch = selectedMatchId
+                  ? HISTORICAL_MATCHES.find(m => m.id === selectedMatchId) ?? null
+                  : null;
+                const chips = activeMatch ? activeMatch.queries : SUGGESTED.var;
+                return (
+                  <div className="empty-state">
+                    {activeMatch ? (
+                      <>
+                        <div className="empty-match-badge">
+                          <span className="empty-match-year">{activeMatch.year} · {activeMatch.stage}</span>
+                        </div>
+                        <p className="empty-headline">{activeMatch.home} vs {activeMatch.away}</p>
+                        <p className="empty-sub">
+                          {activeMatch.homeScore}–{activeMatch.awayScore}{activeMatch.note ? ` · ${activeMatch.note}` : ""}
+                          {" · "}Pick a moment to analyse
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="empty-headline">What do you want to understand?</p>
+                        <p className="empty-sub">Pick a VAR incident to analyse</p>
+                      </>
+                    )}
+                    <div className="suggestions">
+                      {chips.map((s) => (
+                        <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>{s}</button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : (
+                );
+              })() : (
                 messages.map((m) => <ChatMessage key={m.id} message={m} />)
               )}
               <div ref={bottomRef} />
