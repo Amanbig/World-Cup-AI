@@ -1,167 +1,122 @@
-import { useEffect, useState } from 'react';
-import { Header } from './components/Header';
-import { Timeline } from './components/Timeline';
-import { MomentumChart } from './components/MomentumChart';
-import { TacticalBoard } from './components/TacticalBoard';
-import { VARCenter } from './components/VARCenter';
-import { AIAnalyst } from './components/AIAnalyst';
-import { Predictor } from './components/Predictor';
-import { MatchSelector } from './components/MatchSelector';
-import { Calendar, Users, ArrowLeft } from 'lucide-react';
-import { fetchWC2026Matches, getLiveMatches } from './services/sportsDataService';
-import './index.css';
+import { useState } from 'react'
+import reactLogo from './assets/react.svg'
+import viteLogo from './assets/vite.svg'
+import heroImg from './assets/hero.png'
+import './App.css'
 
 function App() {
-  const [currentMinute, setCurrentMinute] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [view, setView] = useState<'hub' | 'analysis'>('hub');
-
-  // Auto-switch to hub when no live match; stay in analysis if live match detected
-  useEffect(() => {
-    fetchWC2026Matches().then(matches => {
-      const live = getLiveMatches(matches);
-      // If a live WC 2026 match is on, user might still want the hub — keep default as hub
-      // Suppress unused — live count could drive future auto-load logic
-      void live;
-    });
-  }, []);
-
-  const milestones = [
-    { minute: 0,   title: 'Kickoff',         subtitle: 'Formations Neutral',       icon: '⚽' },
-    { minute: 21,  title: 'Penalty Award',    subtitle: 'Dembele foul on Di Maria', icon: '⚠️' },
-    { minute: 23,  title: 'Messi Goal',       subtitle: 'Penalty Kick (1-0)',       icon: '🇦🇷' },
-    { minute: 36,  title: 'Di Maria Goal',    subtitle: 'Counter-attack (2-0)',     icon: '🇦🇷' },
-    { minute: 41,  title: 'Tactical Shift',   subtitle: 'Deschamps double sub',     icon: '📋' },
-    { minute: 80,  title: 'Mbappe Goal',      subtitle: 'Penalty Kick (2-1)',       icon: '🇫🇷' },
-    { minute: 81,  title: 'Mbappe Volley',    subtitle: '97s Equalizer (2-2)',      icon: '🇫🇷' },
-    { minute: 108, title: 'Messi Goal',       subtitle: 'Extra-time (3-2)',         icon: '🇦🇷' },
-    { minute: 118, title: 'Mbappe Hat-trick', subtitle: 'Handball Penalty (3-3)',   icon: '🇫🇷' },
-  ];
-
-  if (view === 'hub') {
-    return <MatchSelector onLoadAnalysis={() => setView('analysis')} />;
-  }
+  const [count, setCount] = useState(0)
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#0B0F19] text-gray-100 font-sans selection:bg-neon-cyan/30">
-
-      {/* Sticky header */}
-      <Header
-        currentMinute={currentMinute}
-        setCurrentMinute={setCurrentMinute}
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
-      />
-
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 md:px-10 py-8 flex flex-col gap-8">
-
-        {/* ── Back to Hub ── */}
-        <button
-          onClick={() => { setIsPlaying(false); setView('hub'); }}
-          className="self-start flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:border-white/20 text-xs font-semibold transition-all duration-200"
-        >
-          <ArrowLeft size={13} />
-          World Cup 2026 Hub
-        </button>
-
-        {/* ── Timeline scrubber ── */}
-        <Timeline currentMinute={currentMinute} setCurrentMinute={setCurrentMinute} />
-
-        {/* ── 3-column grid ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr_340px] gap-8 items-start">
-
-          {/* ── LEFT COLUMN ── */}
-          <div className="flex flex-col gap-6">
-
-            {/* Win Predictor */}
-            <Predictor currentMinute={currentMinute} />
-
-            {/* Match Milestones */}
-            <div className="glass-panel p-6 border border-white/10 bg-slate-900/50 rounded-2xl shadow-xl backdrop-blur-xl">
-              <span className="text-xs font-bold uppercase text-neon-cyan tracking-widest flex items-center gap-2 border-b border-white/10 pb-3 mb-4">
-                <Calendar size={14} />
-                Match Milestones
-              </span>
-              <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
-                {milestones.map((ms, i) => {
-                  const isActive = currentMinute >= ms.minute;
-                  const isCurrent = currentMinute === ms.minute;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => { setCurrentMinute(ms.minute); setIsPlaying(false); }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-300 cursor-pointer ${
-                        isCurrent
-                          ? 'bg-neon-cyan/15 border-neon-cyan/40 text-white shadow-[0_4px_15px_rgba(0,216,246,0.15)] scale-[1.02]'
-                          : isActive
-                          ? 'bg-slate-800/60 border-white/10 text-gray-200 hover:bg-slate-800 hover:border-white/20'
-                          : 'bg-slate-900/40 border-transparent text-gray-500 hover:text-gray-300 hover:bg-slate-800/40'
-                      }`}
-                    >
-                      <span className="text-base shrink-0">{ms.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-baseline">
-                          <span className="font-bold text-sm truncate">{ms.title}</span>
-                          <span className="font-mono text-xs text-gray-400 shrink-0 ml-2">{ms.minute}'</span>
-                        </div>
-                        <p className={`text-xs truncate mt-0.5 ${isActive ? 'text-gray-400' : 'text-gray-600'}`}>{ms.subtitle}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Key Tactical Shapers */}
-            <div className="glass-panel p-6 border border-white/10 bg-slate-900/50 rounded-2xl shadow-xl backdrop-blur-xl hidden xl:flex flex-col">
-              <span className="text-xs font-bold uppercase text-neon-purple tracking-widest flex items-center gap-2 border-b border-white/10 pb-3 mb-4">
-                <Users size={14} />
-                Key Tactical Shapers
-              </span>
-              <div className="flex flex-col gap-4">
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span>🇦🇷</span>
-                    <span className="text-xs font-bold text-arg-blue tracking-wider">ARGENTINA</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-white/10 text-xs text-gray-300">L. Messi (CF)</span>
-                    <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-white/10 text-xs text-gray-300">A. Di Maria (LW)</span>
-                    <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-white/10 text-xs text-gray-300">Enzo F. (DM)</span>
-                  </div>
-                </div>
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span>🇫🇷</span>
-                    <span className="text-xs font-bold text-fra-blue-light tracking-wider">FRANCE</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-white/10 text-xs text-gray-300">K. Mbappe (CF)</span>
-                    <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-white/10 text-xs text-gray-300">A. Griezmann (AM)</span>
-                    <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-white/10 text-xs text-gray-300">O. Dembele (RW)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* ── CENTER COLUMN ── */}
-          <div className="flex flex-col gap-8 min-w-0">
-            <MomentumChart currentMinute={currentMinute} />
-            <TacticalBoard currentMinute={currentMinute} />
-          </div>
-
-          {/* ── RIGHT COLUMN ── */}
-          <div className="flex flex-col gap-8">
-            <VARCenter currentMinute={currentMinute} />
-            <AIAnalyst currentMinute={currentMinute} />
-          </div>
-
+    <>
+      <section id="center">
+        <div className="hero">
+          <img src={heroImg} className="base" width="170" height="179" alt="" />
+          <img src={reactLogo} className="framework" alt="React logo" />
+          <img src={viteLogo} className="vite" alt="Vite logo" />
         </div>
-      </main>
-    </div>
-  );
+        <div>
+          <h1>Get started</h1>
+          <p>
+            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+          </p>
+        </div>
+        <button
+          type="button"
+          className="counter"
+          onClick={() => setCount((count) => count + 1)}
+        >
+          Count is {count}
+        </button>
+      </section>
+
+      <div className="ticks"></div>
+
+      <section id="next-steps">
+        <div id="docs">
+          <svg className="icon" role="presentation" aria-hidden="true">
+            <use href="/icons.svg#documentation-icon"></use>
+          </svg>
+          <h2>Documentation</h2>
+          <p>Your questions, answered</p>
+          <ul>
+            <li>
+              <a href="https://vite.dev/" target="_blank">
+                <img className="logo" src={viteLogo} alt="" />
+                Explore Vite
+              </a>
+            </li>
+            <li>
+              <a href="https://react.dev/" target="_blank">
+                <img className="button-icon" src={reactLogo} alt="" />
+                Learn more
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div id="social">
+          <svg className="icon" role="presentation" aria-hidden="true">
+            <use href="/icons.svg#social-icon"></use>
+          </svg>
+          <h2>Connect with us</h2>
+          <p>Join the Vite community</p>
+          <ul>
+            <li>
+              <a href="https://github.com/vitejs/vite" target="_blank">
+                <svg
+                  className="button-icon"
+                  role="presentation"
+                  aria-hidden="true"
+                >
+                  <use href="/icons.svg#github-icon"></use>
+                </svg>
+                GitHub
+              </a>
+            </li>
+            <li>
+              <a href="https://chat.vite.dev/" target="_blank">
+                <svg
+                  className="button-icon"
+                  role="presentation"
+                  aria-hidden="true"
+                >
+                  <use href="/icons.svg#discord-icon"></use>
+                </svg>
+                Discord
+              </a>
+            </li>
+            <li>
+              <a href="https://x.com/vite_js" target="_blank">
+                <svg
+                  className="button-icon"
+                  role="presentation"
+                  aria-hidden="true"
+                >
+                  <use href="/icons.svg#x-icon"></use>
+                </svg>
+                X.com
+              </a>
+            </li>
+            <li>
+              <a href="https://bsky.app/profile/vite.dev" target="_blank">
+                <svg
+                  className="button-icon"
+                  role="presentation"
+                  aria-hidden="true"
+                >
+                  <use href="/icons.svg#bluesky-icon"></use>
+                </svg>
+                Bluesky
+              </a>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <div className="ticks"></div>
+      <section id="spacer"></section>
+    </>
+  )
 }
 
-export default App;
+export default App
