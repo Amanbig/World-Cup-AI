@@ -1,0 +1,21 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+python-dotenv==1.0.1
+httpx==0.28.1
+
+# Docling - structured PDF parsing
+docling==2.15.0
+
+# Vector store
+chromadb==0.5.23
+
+# Embeddings (local, no API key needed)
+sentence-transformers==3.3.1
+
+# LLM clients
+openai==1.57.4
+ibm-watsonx-ai==1.1.21
+
+# Utilities
+pydantic==2.10.3
