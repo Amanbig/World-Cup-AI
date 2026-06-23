@@ -4,6 +4,7 @@ import IncidentSelector from "./components/IncidentSelector";
 import MatchSidebar from "./components/MatchSidebar";
 import PitchView from "./components/PitchView";
 import type { Message, MatchInfo, MatchEvent, VizData } from "./types";
+import type { HistoricalMatch } from "./data/matches";
 import "./App.css";
 
 type IncidentType = "var" | "tactical" | "general";
@@ -52,6 +53,7 @@ export default function App() {
   const [matchInfo, setMatchInfo] = useState<MatchInfo>(DEFAULT_MATCH);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
   const [vizData, setVizData] = useState<VizData | null>(null);
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -69,6 +71,22 @@ export default function App() {
 
   function updateMatchInfo(partial: Partial<MatchInfo>) {
     setMatchInfo((prev) => ({ ...prev, ...partial }));
+  }
+
+  function handleMatchSelect(match: HistoricalMatch | null) {
+    setSelectedMatchId(match?.id ?? null);
+    setVizData(null);
+    setMatchEvents([]);
+    if (match) {
+      setMatchInfo({
+        home_team: match.home,
+        away_team: match.away,
+        minute: 90,
+        incident: "generic",
+      });
+    } else {
+      setMatchInfo(DEFAULT_MATCH);
+    }
   }
 
   async function sendMessage(text: string) {
@@ -215,7 +233,12 @@ export default function App() {
       </header>
 
       {/* ── Mode selector ──────────────────────────────────────── */}
-      <IncidentSelector selected={incidentType} onChange={setIncidentType} />
+      <IncidentSelector
+        selected={incidentType}
+        onChange={setIncidentType}
+        onMatchSelect={handleMatchSelect}
+        selectedMatchId={selectedMatchId}
+      />
 
       {/* ── Body ───────────────────────────────────────────────── */}
       {incidentType === "var" ? (
