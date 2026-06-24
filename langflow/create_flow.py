@@ -19,8 +19,10 @@ import uuid
 import requests
 from dotenv import load_dotenv
 
-# Load .env from the project root (one level up from langflow/)
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+# Load .env from the langflow/ dir first, then fall back to the project root
+_here = os.path.dirname(__file__)
+load_dotenv(os.path.join(_here, ".env"))
+load_dotenv(os.path.join(_here, "..", ".env"))
 
 DEFAULT_URL   = os.getenv("LANGFLOW_URL", "http://localhost:7860")
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -163,13 +165,47 @@ def build_flow(model: str, collection: str, db_path: str) -> dict:
     }
 
 
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+def get_token(url: str) -> str | None:
+    """Return a bearer token via API key (preferred) or auto-login."""
+    api_key = os.getenv("LANGFLOW_API_KEY")
+    if api_key:
+        return api_key
+
+    user = os.getenv("LANGFLOW_USERNAME", "admin")
+    pwd  = os.getenv("LANGFLOW_PASSWORD", "admin")
+    try:
+        resp = requests.post(
+            f"{url}/api/v1/login",
+            data={"username": user, "password": pwd},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10,
+        )
+        if resp.ok:
+            return resp.json().get("access_token")
+    except Exception:
+        pass
+    return None
+
+
 # ── Upload ────────────────────────────────────────────────────────────────────
 
 def upload(url: str, flow: dict) -> str:
+    api_key = os.getenv("LANGFLOW_API_KEY")
+    headers = {"Content-Type": "application/json"}
+
+    if api_key:
+        headers["x-api-key"] = api_key
+    else:
+        token = get_token(url)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
     resp = requests.post(
-        f"{url}/api/v1/flows",
+        f"{url}/api/v1/flows/",
         json=flow,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         timeout=30,
     )
     resp.raise_for_status()
