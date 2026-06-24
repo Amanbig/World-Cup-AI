@@ -1,6 +1,20 @@
-version: "3.9"
+# version: "3.9"
 
 services:
+
+  # ── One-shot ingest service — runs once, populates chroma_db, then exits ────
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python ingest.py --pdf "/data/Laws of the Game 2024_25.pdf"
+    env_file:
+      - .env
+    volumes:
+      - chroma_data:/app/chroma_db
+      - ./backend:/data:ro          # PDF lives in backend/ on host
+    restart: "no"
+
 
   # ── MatchMind app (FastAPI + built React frontend) ──────────────────────────
   app:
@@ -17,7 +31,6 @@ services:
       # Allow requests from the browser (same-origin in prod, or override for dev)
       - CORS_ORIGINS=http://localhost:5173,http://localhost:8000
     volumes:
-      # Persist ChromaDB vector store between restarts
       - chroma_data:/app/chroma_db
     depends_on:
       langflow:
@@ -32,10 +45,14 @@ services:
       - "7860:7860"
     environment:
       - LANGFLOW_AUTO_LOGIN=true          # skip login for local dev
+      - LANGFLOW_NO_AUTH=true             # no API key needed for /api/v1/run
       - LANGFLOW_DATABASE_URL=sqlite:////data/langflow.db
       - LANGFLOW_CONFIG_DIR=/data
+      - LANGFLOW_LOAD_FLOWS_PATH=/flows   # auto-import flows from this directory
     volumes:
-      - langflow_data:/data
+      - ./langflow_data:/data
+      - chroma_data:/chroma_db
+      - ./langflow:/flows                 # mount langflow/ dir so JSON is visible
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
       interval: 20s
@@ -47,4 +64,3 @@ services:
 
 volumes:
   chroma_data:
-  langflow_data:

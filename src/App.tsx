@@ -162,10 +162,11 @@ export default function App() {
           } catch { /* ignore malformed SSE lines */ }
         }
       }
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not reach the backend. Is it running on port 8000?";
       setMessages((prev) => prev.map((m) =>
         m.id === assistantId
-          ? { ...m, loading: false, content: "Could not reach the backend. Is it running on port 8000?" }
+          ? { ...m, loading: false, content: msg }
           : m
       ));
     } finally {

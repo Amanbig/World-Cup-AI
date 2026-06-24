@@ -27,9 +27,12 @@ load_dotenv()
 CHROMA_DB_PATH    = os.getenv("CHROMA_DB_PATH", "./chroma_db")
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "fifa_rules")
 
-LLM_PROVIDER    = os.getenv("LLM_PROVIDER", "openai")
-OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL    = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+LLM_PROVIDER       = os.getenv("LLM_PROVIDER", "openai")
+OPENAI_API_KEY     = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL       = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 WATSONX_API_KEY = os.getenv("WATSONX_API_KEY", "")
 WATSONX_PROJECT = os.getenv("WATSONX_PROJECT_ID", "")
 WATSONX_URL     = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
@@ -39,6 +42,7 @@ OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 LANGFLOW_URL     = os.getenv("LANGFLOW_URL", "")
 LANGFLOW_FLOW_ID = os.getenv("LANGFLOW_FLOW_ID", "")
+LANGFLOW_API_KEY = os.getenv("LANGFLOW_API_KEY", "")
 
 TOP_K = 5
 
@@ -148,7 +152,21 @@ async def _llm(system: str, user: str) -> str:
         return await _call_watsonx(system, user)
     if LLM_PROVIDER == "ollama":
         return await _call_ollama(system, user)
+    if LLM_PROVIDER == "openrouter" or OPENROUTER_API_KEY:
+        return await _call_openrouter(system, user)
     return await _call_openai(system, user)
+
+
+async def _call_openrouter(system: str, user: str) -> str:
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
+    resp = await client.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        temperature=0.3,
+        max_tokens=2048,
+    )
+    return resp.choices[0].message.content
 
 
 async def _call_openai(system: str, user: str) -> str:
@@ -240,11 +258,29 @@ async def _stream_llm(system: str, user: str):
         async for chunk in _stream_ollama(system, user):
             yield chunk
     elif LLM_PROVIDER == "watsonx":
-        # WatsonX batch → emit as single chunk
         yield await _call_watsonx(system, user)
+    elif LLM_PROVIDER == "openrouter" or OPENROUTER_API_KEY:
+        async for chunk in _stream_openrouter(system, user):
+            yield chunk
     else:
         async for chunk in _stream_openai(system, user):
             yield chunk
+
+
+async def _stream_openrouter(system: str, user: str):
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
+    stream = await client.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        temperature=0.3,
+        max_tokens=2048,
+        stream=True,
+    )
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
 
 
 # ── JSON parsing for VAR responses ──────────────────────────────────────────────
@@ -287,8 +323,11 @@ async def _call_langflow(query: str, incident_type: str) -> dict:
         "output_type": "chat",
         "tweaks": {"incident_type": incident_type},
     }
+    headers = {}
+    if LANGFLOW_API_KEY:
+        headers["x-api-key"] = LANGFLOW_API_KEY
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, json=payload)
+        resp = await client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()
     try:
@@ -311,9 +350,13 @@ async def stream_answer(query: str, incident_type: str = "general"):
         return f"data: {json.dumps(obj)}\n\n"
 
     if LANGFLOW_URL and LANGFLOW_FLOW_ID:
-        result = await _call_langflow(query, incident_type)
-        yield sse({"type": "chunk", "text": result["answer"]})
-        yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
+        try:
+            result = await _call_langflow(query, incident_type)
+            yield sse({"type": "chunk", "text": result["answer"]})
+            yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
+        except Exception as e:
+            yield sse({"type": "chunk", "text": f"LLM error: {e}"})
+            yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
         return
 
     try:

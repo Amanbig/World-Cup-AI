@@ -95,7 +95,7 @@ interface Props {
 export default function PitchView({ vizData, homeTeam, awayTeam }: Props) {
   const [frameIdx, setFrameIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval>>()
+  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   useEffect(() => {
     clearInterval(intervalRef.current)

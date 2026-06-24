@@ -24,7 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc g++ libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps first (layer cache)
+# Install CPU-only torch first to avoid the 2GB CUDA build being pulled in by sentence-transformers
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python deps (layer cache)
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

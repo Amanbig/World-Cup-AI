@@ -27,3 +27,6 @@ venv/
 .venv/
 
 *.env
+
+chroma_db/
+langflow_data/
