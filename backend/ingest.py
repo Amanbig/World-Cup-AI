@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "./chroma_db")
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", str(Path(__file__).parent / "chroma_db"))
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "fifa_rules")
 
 CHUNK_MAX_CHARS = 800

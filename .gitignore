@@ -30,3 +30,5 @@ venv/
 
 chroma_db/
 langflow_data/
+
+__pycache__/

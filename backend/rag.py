@@ -15,6 +15,7 @@ the pitch visualisation on the frontend.
 import json
 import os
 import re
+from pathlib import Path
 
 import chromadb
 import httpx
@@ -24,7 +25,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── config ─────────────────────────────────────────────────────────────────────
-CHROMA_DB_PATH    = os.getenv("CHROMA_DB_PATH", "./chroma_db")
+CHROMA_DB_PATH    = os.getenv("CHROMA_DB_PATH", str(Path(__file__).parent / "chroma_db"))
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "fifa_rules")
 
 LLM_PROVIDER       = os.getenv("LLM_PROVIDER", "openai")
@@ -39,6 +40,10 @@ WATSONX_URL     = os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com")
 WATSONX_MODEL   = os.getenv("WATSONX_MODEL", "ibm/granite-13b-chat-v2")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2")
+
+GROQ_API_KEY    = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL      = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_BASE_URL   = "https://api.groq.com/openai/v1"
 
 LANGFLOW_URL     = os.getenv("LANGFLOW_URL", "")
 LANGFLOW_FLOW_ID = os.getenv("LANGFLOW_FLOW_ID", "")
@@ -123,11 +128,13 @@ JSON schema:
 }
 
 RULES:
-- Include 4–6 players per team showing a realistic formation shape.
+- Include 4–6 players per team spread realistically across the pitch in a proper formation shape.
+- SPACING: every player must be at least 8 units away from every OTHER player (compare both x and y). Never stack players on top of each other.
+- Only the 1–2 players directly involved in the incident should be near incident_point. Everyone else holds their formation position.
 - Use REAL player names/numbers if the teams are well-known (e.g. World Cup 2022 Final).
 - For offside: frame 1 = before pass (attacker onside), frame 2 = at pass (attacker beyond offside_y line).
 - For handball: show ball trajectory across frames; incident_point = contact location.
-- For foul: incident_point = foul spot; show attacker + defender at that location.
+- For foul: incident_point = foul spot; only the fouler and fouled player are within 10 units of it; defenders and midfielders stay spread in formation.
 - Keep player ids STABLE across frames so CSS transitions animate the movement correctly."""
 
 INCIDENT_PREFIXES = {
@@ -148,6 +155,8 @@ def _build_prompt(query: str, chunks: list[dict], incident_type: str) -> str:
 # ── LLM calls (batch) ───────────────────────────────────────────────────────────
 
 async def _llm(system: str, user: str) -> str:
+    if LLM_PROVIDER == "groq":
+        return await _call_groq(system, user)
     if LLM_PROVIDER == "watsonx":
         return await _call_watsonx(system, user)
     if LLM_PROVIDER == "ollama":
@@ -169,15 +178,34 @@ async def _call_openrouter(system: str, user: str) -> str:
     return resp.choices[0].message.content
 
 
+async def _call_groq(system: str, user: str) -> str:
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
+    kwargs = {}
+    if system == SYSTEM_VAR:
+        kwargs["response_format"] = {"type": "json_object"}
+    resp = await client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        temperature=0.3,
+        max_tokens=2048,
+        **kwargs,
+    )
+    return resp.choices[0].message.content
+
+
 async def _call_openai(system: str, user: str) -> str:
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    kwargs = {}
+    if system == SYSTEM_VAR:
+        kwargs["response_format"] = {"type": "json_object"}
     resp = await client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         temperature=0.3,
         max_tokens=2048,
-        response_format={"type": "json_object"} if system == SYSTEM_VAR else None,
+        **kwargs,
     )
     return resp.choices[0].message.content
 
@@ -252,9 +280,28 @@ async def _stream_ollama(system: str, user: str):
                     pass
 
 
+async def _stream_groq(system: str, user: str):
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
+    stream = await client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        temperature=0.3,
+        max_tokens=2048,
+        stream=True,
+    )
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
+
+
 async def _stream_llm(system: str, user: str):
     """Yield text chunks from whichever LLM is configured."""
-    if LLM_PROVIDER == "ollama":
+    if LLM_PROVIDER == "groq":
+        async for chunk in _stream_groq(system, user):
+            yield chunk
+    elif LLM_PROVIDER == "ollama":
         async for chunk in _stream_ollama(system, user):
             yield chunk
     elif LLM_PROVIDER == "watsonx":
