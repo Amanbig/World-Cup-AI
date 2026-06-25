@@ -1,280 +1,387 @@
 # MatchMind — AI World Cup Companion
 
-> Explain VAR decisions, animate player positions, and break down FIFA Laws of the Game — powered by Docling + Langflow.
-
-Built for the **IBM & FIFA World Cup AI Hackathon**.
-
----
-
-## What it does
-
-**MatchMind** is a three-panel football intelligence app:
-
-| Panel | Purpose |
-|-------|---------|
-| **Scoreboard** (left) | Live or historical match context — teams, score, clock, VAR incident timeline |
-| **Pitch** (center) | Animated player dots showing formations and movement across VAR review frames |
-| **AI Chat** (right) | Streaming answers that cite specific FIFA Laws, with match-specific suggested questions |
-
-**Three modes:**
-- **VAR Decision** — ask about any offside, handball, foul or penalty review; the AI returns a structured JSON response that animates the pitch
-- **Tactical Analysis** — formation breakdowns, pressing systems, substitution logic
-- **Rule Question** — any FIFA Law of the Game question, grounded in the ingested PDF
-
-**Historical match selector** — pick any match from 2014/2018/2022 World Cups and get match-specific suggested questions pre-loaded (e.g. "Argentina had three goals disallowed by VAR vs Saudi Arabia — show the offside lines").
+A React + FastAPI app that answers FIFA rules and VAR questions with **real-time pitch animations**.  
+Two backend modes — run either or switch between them with one env-var change.
 
 ---
 
-## Tech stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 + TypeScript + Vite |
-| Backend | FastAPI + Uvicorn |
-| PDF ingestion | **Docling** — structured PDF → chunks |
-| Vector store | ChromaDB + `all-MiniLM-L6-v2` embeddings |
-| RAG pipeline | **Langflow** (visual) or direct in-process |
-| LLM | OpenAI GPT-4o-mini / IBM WatsonX Granite / Ollama |
-| Pitch viz | CSS `position: absolute` dots + SVG markings, animated with `transition` |
-| Streaming | Server-Sent Events (SSE) — tokens stream live to the chat |
-| Container | Docker multi-stage build + Docker Compose |
-
----
-
-## Project structure
+## Architecture Overview
 
 ```
-matchmind/
-├── src/                        # React frontend
-│   ├── components/
-│   │   ├── PitchView.tsx       # Animated pitch with player dots
-│   │   ├── MatchSidebar.tsx    # Scoreboard + events timeline
-│   │   ├── IncidentSelector.tsx # Mode tabs + match selector dropdown
-│   │   └── ChatMessage.tsx     # Message bubbles with streaming cursor
-│   ├── data/
-│   │   └── matches.ts          # Historical match data + suggested queries
-│   ├── types.ts
-│   ├── App.tsx
-│   └── App.css
-├── backend/
-│   ├── main.py                 # FastAPI app — API routes + static file serving
-│   ├── rag.py                  # RAG logic, LLM calls, SSE streaming
-│   ├── ingest.py               # Docling PDF → ChromaDB pipeline
-│   └── requirements.txt
-├── Dockerfile                  # Multi-stage: Node builds frontend → Python serves everything
-├── docker-compose.yml          # app + langflow services
-├── .env.example
-└── vite.config.ts              # Dev proxy: /api → localhost:8000
+Browser (React + Vite)
+      │
+      │  SSE streaming  /api/chat/stream
+      ▼
+FastAPI (main.py)
+      │
+      ├─── MODE A: Direct (default) ─────────────────────────────────────────
+      │         rag.py  →  Agentic LLM loop (Groq llama-3.3-70b)
+      │                        ├─ tool: search_fifa_rules  →  ChromaDB
+      │                        ├─ tool: web_search         →  DuckDuckGo (free)
+      │                        └─ tool: create_pitch_animation  →  SSE viz_data
+      │
+      └─── MODE B: Langflow ─────────────────────────────────────────────────
+                Langflow (port 7860)
+                    ├─ Dockling loader  →  PDF parsing (superior to PyMuPDF)
+                    ├─ ChromaDB         →  vector store
+                    ├─ Groq / OpenAI    →  LLM
+                    └─ Agent tools      →  web search, retrieval
 ```
+
+Switch between modes by setting/unsetting two env vars — no code changes.
 
 ---
 
-## Quick start
+## Mode A — Direct (default, no extra services)
 
-### Option A — Docker Compose (recommended)
+### 1. Prerequisites
 
-Everything runs in containers: the app, Langflow, and persistent volumes for ChromaDB and Langflow data.
+- Python 3.11+, Node 20+
+- [Groq](https://console.groq.com) API key (free tier available)
+
+### 2. Install
 
 ```bash
-# 1. Clone and configure
-cp .env.example .env
-# Edit .env — set OPENAI_API_KEY (or configure Ollama/WatsonX)
+# Frontend
+cd client && npm install && cd ..
 
-# 2. Build and start
-docker compose up --build
-```
-
-| Service | URL |
-|---------|-----|
-| MatchMind app | http://localhost:8000 |
-| Langflow editor | http://localhost:7860 |
-
-> **First build takes ~5 minutes** — the Dockerfile pre-downloads the `all-MiniLM-L6-v2` embedding model so the first PDF ingest is fast.
-
----
-
-### Option B — Local development
-
-**Backend**
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
+# Server
+cd server
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp ../.env.example ../.env   # fill in keys
-uvicorn main:app --reload --port 8000
 ```
 
-**Frontend** (separate terminal)
-```bash
-npm install
-npm run dev      # Vite proxy forwards /api → localhost:8000
-```
+### 3. Configure `.env`
 
-Open http://localhost:5173
-
----
-
-## Ingest a FIFA PDF
-
-1. Click **"Upload FIFA PDF to start"** in the top-right of the app
-2. Upload the [FIFA Laws of the Game PDF](https://www.theifab.com/laws-of-the-game-documents/) (or any match report)
-3. Docling parses it into structured chunks → ChromaDB stores embeddings
-4. The status pill turns green with the chunk count — you're ready to ask questions
-
----
-
-## Langflow setup
-
-Langflow lets you visually build and tweak the RAG pipeline without touching code. The flow is:
-
-```
-ChatInput → Chroma retriever → Prompt template → LLM → ChatOutput
-```
-
-### Option A — auto-create (recommended)
-
-A script uploads the pre-built flow directly to your Langflow instance:
-
-```bash
-# With Docker Compose running:
-cd langflow
-pip install requests python-dotenv
-python create_flow.py
-
-# Or point at a custom URL:
-python create_flow.py --url http://localhost:7860 --model gpt-4o-mini
-```
-
-The script prints the Flow ID and the exact lines to add to `.env`:
-```
-Flow ID : xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
-Add these to your .env:
-  LANGFLOW_URL=http://localhost:7860
-  LANGFLOW_FLOW_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-```
-
-Then restart the app:
-```bash
-docker compose restart app
-```
-
-### Option B — manual import
-
-The script also saves `langflow/matchmind_flow.json`. Import it via the Langflow UI:
-
-1. Open http://localhost:7860
-2. Click **Import** (top right) → select `langflow/matchmind_flow.json`
-3. Click **API** tab on the flow → copy the **Flow ID**
-4. Add to `.env` and restart
-
-### What the flow does
-
-| Node | Role |
-|------|------|
-| **ChatInput** | Receives the user's question |
-| **Chroma** | Queries the `fifa_rules` vector store (built by Docling ingest) and returns top-5 chunks |
-| **Prompt** | Injects retrieved context + question into the MatchMind system prompt |
-| **OpenAI / Granite** | Generates the answer, citing specific FIFA Laws |
-| **ChatOutput** | Returns the response to the backend |
-
-> If `LANGFLOW_FLOW_ID` is not set, the app falls back to the built-in in-process RAG path automatically — so Langflow is optional.
-
----
-
-## LLM configuration
-
-Set `LLM_PROVIDER` in `.env` to switch providers:
-
-### OpenAI (default)
 ```env
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+# ChromaDB
+CHROMA_DB_PATH=/absolute/path/to/World_cup_ai/server/chroma_db
+CHROMA_COLLECTION=fifa_rules
+
+# CORS
+CORS_ORIGINS=http://localhost:5173,http://localhost:8000
+
+# LLM — Groq (recommended, free)
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=llama-3.3-70b-versatile
+
+# Leave UNSET to use Direct mode
+# LANGFLOW_URL=
+# LANGFLOW_FLOW_ID=
 ```
 
-### Ollama (local, no API key)
+### 4. Ingest the FIFA PDF
+
 ```bash
-ollama pull llama3.2
+cd server
+source venv/bin/activate
+python ingest.py --pdf "Laws of the Game 2024_25.pdf"
 ```
+
+Chunks the PDF, embeds with `all-MiniLM-L6-v2`, writes to `chroma_db/`.
+
+### 5. Run
+
+```bash
+# Terminal 1 — server
+cd server && source venv/bin/activate && python main.py
+
+# Terminal 2 — client
+cd client && npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173).
+
+---
+
+## Mode B — Langflow (visual flow editor + Dockling)
+
+Langflow lets you build and modify the RAG pipeline visually.  
+**Dockling** replaces PyMuPDF for PDF parsing — better table extraction, layout understanding, and multi-format support.
+
+### Why Langflow + Dockling?
+
+| Feature | Direct (PyMuPDF) | Langflow + Dockling |
+|---------|-----------------|---------------------|
+| PDF parsing | Text blocks only | Layout-aware (tables, headings, captions) |
+| Multi-format | PDF only | PDF, DOCX, PPTX, HTML, images |
+| Visual editing | Code changes | Drag-and-drop UI |
+| Chunking strategy | Hardcoded | Configurable per node |
+| Observability | Logs | Built-in trace viewer |
+
+---
+
+### Option B1 — Docker (recommended, one command)
+
+```bash
+cp .env.example .env
+# edit .env — set GROQ_API_KEY at minimum
+
+docker compose up -d           # starts app + langflow
+docker compose run --rm ingest # one-time PDF ingest
+```
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| `app` | http://localhost:8000 | MatchMind (FastAPI + React) |
+| `langflow` | http://localhost:7860 | Visual flow editor |
+
+Then follow **"Build the Langflow Flow"** below.
+
+### Option B2 — Local Langflow install
+
+```bash
+pip install langflow
+langflow run --host 0.0.0.0 --port 7860
+```
+
+---
+
+### Build the Langflow Flow
+
+#### Import the exported flow (fastest)
+
+1. Open [http://localhost:7860](http://localhost:7860)
+2. Click **"Upload Flow"**
+3. Select `langflow/MatchMind RAG.json`
+4. Done — the flow is ready, just add your API keys in the LLM node
+
+---
+
+#### Build manually (node by node)
+
+Flow layout (left → right):
+
+```
+[Dockling Loader] → [Text Splitter] → [Chroma (ingest)]
+                                             ↑
+                                       [Embeddings]
+
+[Chat Input] → [Agent] → [Chat Output]
+                  ↑
+           [search_fifa_rules tool]  ← Chroma (retrieval)
+           [web_search tool]         ← DuckDuckGo
+```
+
+---
+
+**Node 1 — Dockling Document Loader**
+
+Search sidebar: `Dockling`
+
+| Field | Value |
+|-------|-------|
+| Files | Upload `Laws of the Game 2024_25.pdf` |
+| Export Format | `markdown` |
+| Table Mode | `accurate` |
+
+> Dockling correctly parses tables (penalty rules, card counts, dimensions) that PyMuPDF drops.
+
+---
+
+**Node 2 — Recursive Character Text Splitter**
+
+| Field | Value |
+|-------|-------|
+| Chunk Size | `800` |
+| Chunk Overlap | `100` |
+| Separators | `\n\n`, `\n`, `. ` |
+
+Connect: `Dockling → Splitter`
+
+---
+
+**Node 3 — HuggingFace Embeddings**
+
+| Field | Value |
+|-------|-------|
+| Model Name | `sentence-transformers/all-MiniLM-L6-v2` |
+
+*(No API key needed — runs locally)*
+
+---
+
+**Node 4 — Chroma (ingest + retrieval)**
+
+| Field | Value |
+|-------|-------|
+| Collection Name | `fifa_rules_langflow` |
+| Persist Directory | `/data/chroma_db` (Docker) or absolute local path |
+| Search Type | `Similarity` |
+| Number of Results | `5` |
+
+Connect: `Splitter → Chroma`, `Embeddings → Chroma`
+
+---
+
+**Node 5 — search_fifa_rules Tool**
+
+Add a second Chroma instance configured as a **Retriever Tool**:
+
+| Field | Value |
+|-------|-------|
+| Name | `search_fifa_rules` |
+| Description | `Search FIFA Laws of the Game for rules, VAR protocol, and definitions` |
+
+Connect to Agent's tool input.
+
+---
+
+**Node 6 — DuckDuckGo Web Search Tool**
+
+Search: `DuckDuckGo Search`
+
+| Field | Value |
+|-------|-------|
+| Name | `web_search` |
+| Max Results | `5` |
+
+Connect to Agent's tool input.
+
+---
+
+**Node 7 — Agent (Tool-Calling LLM)**
+
+| Field | Value |
+|-------|-------|
+| LLM | Groq → `llama-3.3-70b-versatile` |
+| Tools | `search_fifa_rules`, `web_search` |
+| System Message | see below |
+
+System message:
+```
+You are MatchMind, an expert AI football companion for the FIFA World Cup.
+
+Use search_fifa_rules to look up official FIFA Laws before answering rule questions.
+Use web_search for current news, match results, transfers, or recent events not in the rules PDF.
+For simple greetings or conversational messages, respond directly without using tools.
+
+Always cite the FIFA Law number when explaining rules (e.g. "Law 11 – Offside").
+```
+
+Connect: `Chat Input → Agent → Chat Output`
+
+---
+
+### Activate Langflow mode in MatchMind
+
+1. Get the Flow ID from the browser URL:
+   `http://localhost:7860/flow/<YOUR-FLOW-ID>`
+
+2. Add to `.env`:
+
 ```env
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://host.docker.internal:11434   # from inside Docker
-OLLAMA_MODEL=llama3.2
+LANGFLOW_URL=http://localhost:7860
+LANGFLOW_FLOW_ID=<paste-uuid-here>
+# LANGFLOW_API_KEY=sk-...   # only if Langflow auth is enabled
 ```
 
-### IBM WatsonX Granite
-```env
-LLM_PROVIDER=watsonx
-WATSONX_API_KEY=...
-WATSONX_PROJECT_ID=...
-WATSONX_MODEL=ibm/granite-13b-chat-v2
+3. Restart:
+
+```bash
+python main.py          # local
+docker compose restart app  # Docker
+```
+
+MatchMind now forwards all queries to Langflow instead of running local RAG.
+
+---
+
+## Switching Between Modes
+
+| Mode | `.env` |
+|------|--------|
+| Direct (Groq + local RAG + tools) | `LANGFLOW_URL=` *(unset or empty)* |
+| Langflow | `LANGFLOW_URL=http://localhost:7860` + `LANGFLOW_FLOW_ID=<uuid>` |
+
+No code changes — just edit `.env` and restart.
+
+---
+
+## Docker Stack Reference
+
+```bash
+docker compose up -d             # start all services
+docker compose run --rm ingest   # ingest PDF into ChromaDB (run once)
+docker compose logs -f app       # watch app logs
+docker compose logs -f langflow  # watch Langflow logs
+docker compose down              # stop everything
+```
+
+Services:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| `ingest` | — | One-shot PDF → ChromaDB, then exits |
+| `app` | 8000 | MatchMind FastAPI + React frontend |
+| `langflow` | 7860 | Visual flow editor |
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GROQ_API_KEY` | Yes (Direct) | — | Free at console.groq.com |
+| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model |
+| `LLM_PROVIDER` | No | `openai` | `groq` / `openrouter` / `openai` / `ollama` |
+| `CHROMA_DB_PATH` | No | `./server/chroma_db` | Absolute path to ChromaDB |
+| `CHROMA_COLLECTION` | No | `fifa_rules` | Collection name |
+| `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed origins |
+| `LANGFLOW_URL` | No | — | Set to enable Langflow mode |
+| `LANGFLOW_FLOW_ID` | No | — | Flow UUID from Langflow UI |
+| `LANGFLOW_API_KEY` | No | — | Only if Langflow auth is on |
+| `OPENAI_API_KEY` | No | — | If `LLM_PROVIDER=openai` |
+| `OPENROUTER_API_KEY` | No | — | If using OpenRouter |
+
+---
+
+## Project Structure
+
+```
+World_cup_ai/
+├── client/                  # React + TypeScript frontend (Vite)
+│   ├── src/
+│   │   ├── App.tsx          # Main layout + SSE client + agentic state
+│   │   ├── components/
+│   │   │   ├── PitchView.tsx    # Animated pitch canvas (portrait, 68×105)
+│   │   │   └── ChatMessage.tsx  # Markdown renderer + tool status
+│   │   ├── data/matches.ts  # 14 historical World Cup matches + events
+│   │   └── types.ts
+│   ├── package.json
+│   └── vite.config.ts
+├── server/                  # FastAPI backend (Python)
+│   ├── main.py              # Routes + SSE streaming
+│   ├── rag.py               # Agentic loop + 3 tools (Direct mode)
+│   ├── ingest.py            # PDF → ChromaDB (PyMuPDF)
+│   ├── requirements.txt
+│   └── chroma_db/           # Vector store (git-ignored)
+├── langflow/
+│   ├── MatchMind RAG.json   # Exported flow — import via Langflow UI
+│   ├── create_flow.py       # Script to auto-upload flow via API
+│   └── README.md            # Langflow-specific setup
+├── Dockerfile               # Multi-stage: client build → server image
+├── docker-compose.yml       # app + langflow + ingest services
+└── .env                     # Local config (never commit)
 ```
 
 ---
 
-## How VAR mode works
+## Agentic Tools (Direct mode)
 
-1. User types a question (e.g. *"Argentina had 3 goals disallowed vs Saudi Arabia — show the offside lines"*)
-2. Backend retrieves relevant FIFA Law chunks from ChromaDB
-3. LLM is prompted with `SYSTEM_VAR` — a structured JSON schema requiring:
-   - `answer` — cited explanation
-   - `match` — extracted teams, minute, incident type
-   - `visualization.frames` — player positions in portrait pitch coordinates (x: 0–68, y: 0–105)
-   - `offside_y` — y-coordinate of the horizontal offside line
-4. Response streams back via SSE — chat updates token by token
-5. When the `done` event fires, the pitch animates player dots across frames with CSS transitions
+The LLM autonomously decides which tools to call per message:
 
----
+| Tool | When called | Backend |
+|------|-------------|---------|
+| `search_fifa_rules` | Rule questions, VAR, Law citations | ChromaDB (local, no API key) |
+| `web_search` | Recent news, results, transfers, injuries | DuckDuckGo (free, no API key) |
+| `create_pitch_animation` | Any scenario where player positions help | LLM-generated JSON frames |
 
-## Pitch coordinate system
-
+The frontend shows live tool status:
 ```
-  y=0  ┌──────────────────┐  Away team defends top goal
-       │   Away players   │  GK ≈ y=5, defenders y=15–25
-       │                  │
- y=52.5├──────── ○ ───────┤  Centre line
-       │                  │
-       │   Home players   │  forwards y=55–65, GK ≈ y=100
-  y=105└──────────────────┘  Home team defends bottom goal
-       x=0              x=68
+🔍 Searching FIFA rules for "offside law 11"…
+✅ Found 5 relevant rule sections
+📺 Generating pitch animation…
+✅ Animation ready — 4 frames
 ```
-
-Player dots use `position: absolute` with `left`/`top` as percentages so they scale to any pitch size. CSS `transition: 0.7s cubic-bezier` animates movement between frames.
-
----
-
-## Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_PROVIDER` | `openai` | `openai` / `ollama` / `watsonx` |
-| `OPENAI_API_KEY` | — | Required if using OpenAI |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Any chat model |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `llama3.2` | Any Ollama model |
-| `WATSONX_API_KEY` | — | IBM WatsonX API key |
-| `WATSONX_PROJECT_ID` | — | WatsonX project ID |
-| `LANGFLOW_URL` | — | Langflow server URL (e.g. `http://localhost:7860`) |
-| `LANGFLOW_FLOW_ID` | — | Flow ID from Langflow UI |
-| `CHROMA_DB_PATH` | `./chroma_db` | ChromaDB persistence path |
-| `CHROMA_COLLECTION` | `fifa_rules` | Collection name |
-| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed origins |
-
----
-
-## Historical match data
-
-The app ships with suggested VAR questions for 20+ matches across three World Cups:
-
-- **2022 Qatar** — Final (ARG vs FRA), all QF/SF, group stage upsets (ARG vs KSA)
-- **2018 Russia** — Final (FRA vs CRO), R16 (ARG vs FRA), Spain vs Russia
-- **2014 Brazil** — Final (GER vs ARG), semi-final (BRA 1–7 GER), QF incidents
-
-Select any match from the dropdown in the top bar → the scoreboard pre-fills with real teams and the chat shows match-specific questions ready to fire.
-
----
-
-## License
-
-MIT

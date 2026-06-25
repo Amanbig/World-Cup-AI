@@ -3,41 +3,41 @@ FROM node:20-alpine AS frontend
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY client/package*.json ./
 RUN npm ci --ignore-scripts
 
-COPY index.html vite.config.ts tsconfig*.json eslint.config.js ./
-COPY public ./public
-COPY src ./src
+COPY client/index.html client/vite.config.ts client/tsconfig*.json client/eslint.config.js ./
+COPY client/public ./public
+COPY client/src ./src
 
 RUN npm run build
 # Output: /app/dist
 
 
-# ── Stage 2: Python backend + built frontend ──────────────────────────────────
-FROM python:3.11-slim AS backend
+# ── Stage 2: Python server + built frontend ───────────────────────────────────
+FROM python:3.11-slim AS server
 
 WORKDIR /app
 
-# System deps needed by docling / chromadb / sentence-transformers
+# System deps needed by chromadb / sentence-transformers
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc g++ libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only torch first to avoid the 2GB CUDA build being pulled in by sentence-transformers
+# CPU-only torch — prevents sentence-transformers pulling the 2 GB CUDA build
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Install remaining Python deps (layer cache)
-COPY backend/requirements.txt .
+# Python deps (separate layer for cache efficiency)
+COPY server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the embedding model so first ingest doesn't stall
+# Pre-download embedding model so first ingest doesn't stall
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-# Copy backend source
-COPY backend/ .
+# Copy server source
+COPY server/ .
 
-# Copy built frontend into ./static — FastAPI serves it at /
+# Serve built frontend from ./static (FastAPI mounts it at /)
 COPY --from=frontend /app/dist ./static
 
 EXPOSE 8000

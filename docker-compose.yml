@@ -1,8 +1,6 @@
-# version: "3.9"
-
 services:
 
-  # ── One-shot ingest service — runs once, populates chroma_db, then exits ────
+  # ── One-shot ingest — runs once, populates chroma_db, then exits ─────────────
   ingest:
     build:
       context: .
@@ -12,11 +10,11 @@ services:
       - .env
     volumes:
       - chroma_data:/app/chroma_db
-      - ./backend:/data:ro          # PDF lives in backend/ on host
+      - ./server:/data:ro          # PDF lives in server/ on host
     restart: "no"
 
 
-  # ── MatchMind app (FastAPI + built React frontend) ──────────────────────────
+  # ── MatchMind app (FastAPI + built React frontend) ────────────────────────────
   app:
     build:
       context: .
@@ -26,9 +24,7 @@ services:
     env_file:
       - .env
     environment:
-      # Langflow runs as a sibling service — override URL for Docker networking
-      - LANGFLOW_URL=http://langflow:7860
-      # Allow requests from the browser (same-origin in prod, or override for dev)
+      - LANGFLOW_URL=http://langflow:7860   # sibling service in Docker network
       - CORS_ORIGINS=http://localhost:5173,http://localhost:8000
     volumes:
       - chroma_data:/app/chroma_db
@@ -38,21 +34,21 @@ services:
     restart: unless-stopped
 
 
-  # ── Langflow visual RAG pipeline editor ─────────────────────────────────────
+  # ── Langflow visual RAG pipeline editor ──────────────────────────────────────
   langflow:
     image: langflowai/langflow:latest
     ports:
       - "7860:7860"
     environment:
-      - LANGFLOW_AUTO_LOGIN=true          # skip login for local dev
-      - LANGFLOW_NO_AUTH=true             # no API key needed for /api/v1/run
+      - LANGFLOW_AUTO_LOGIN=true
+      - LANGFLOW_NO_AUTH=true
       - LANGFLOW_DATABASE_URL=sqlite:////data/langflow.db
       - LANGFLOW_CONFIG_DIR=/data
-      - LANGFLOW_LOAD_FLOWS_PATH=/flows   # auto-import flows from this directory
+      - LANGFLOW_LOAD_FLOWS_PATH=/flows    # auto-import flows on startup
     volumes:
       - ./langflow_data:/data
       - chroma_data:/chroma_db
-      - ./langflow:/flows                 # mount langflow/ dir so JSON is visible
+      - ./langflow:/flows                  # langflow/*.json imported automatically
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
       interval: 20s
