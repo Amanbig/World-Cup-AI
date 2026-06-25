@@ -73,86 +73,190 @@ def retrieve(query: str, top_k: int = TOP_K) -> list[dict]:
     return chunks
 
 
-# ── prompts ─────────────────────────────────────────────────────────────────────
+# ── Agent system prompt ──────────────────────────────────────────────────────────
 
-SYSTEM_GENERAL = """You are MatchMind, an expert FIFA Laws of the Game companion for the World Cup.
-Explain rules, tactical shifts, and football concepts clearly.
-Always cite the specific Law or section (e.g. "Law 11 – Offside").
-Base your answer on the retrieved context below. Do not invent rules."""
+SYSTEM_AGENT = """You are MatchMind, an expert AI football companion for the FIFA World Cup.
+You have two tools available — use them whenever they add value:
 
-# VAR system prompt — portrait pitch coords, jersey numbers, player names.
-SYSTEM_VAR = """You are MatchMind, an expert FIFA Laws of the Game companion.
-For this VAR decision query return ONLY a valid JSON object — no markdown, no preamble.
+• web_search — search the web (DuckDuckGo) for current football news, recent match results, player transfers, injuries, World Cup standings, or anything time-sensitive. Use this when the question is about recent events not covered by the FIFA PDF.
 
-PORTRAIT PITCH COORDINATE SYSTEM (very important — read carefully):
-- The pitch is displayed VERTICALLY (portrait): x = 0–68 (left→right), y = 0–105 (top→bottom)
-- AWAY team defends the TOP goal (y=0). Away players occupy y = 0–52.
-    Away GK:        x≈34, y≈5
-    Away defenders: y≈15–25, spread x≈10–58
-    Away midfield:  y≈28–40, spread x≈10–58
-    Away forwards:  y≈42–52, spread x≈10–58
-- HOME team defends the BOTTOM goal (y=105). Home players occupy y = 53–105.
-    Home forwards:  y≈55–65, spread x≈10–58
-    Home midfield:  y≈65–78, spread x≈10–58
-    Home defenders: y≈80–92, spread x≈10–58
-    Home GK:        x≈34, y≈100
-- offside_y is the Y-coordinate of the HORIZONTAL offside line (not x).
-- incident_point uses the same portrait (x, y) system.
+• search_fifa_rules — look up the FIFA Laws of the Game knowledge base. Use this for any question about rules, regulations, VAR protocol, or official definitions. Always search before answering rule questions so your answers are accurate and cited.
 
-JSON schema:
-{
-  "answer": "<detailed explanation citing the specific FIFA Law, e.g. Law 11>",
-  "match": {
-    "home_team": "<team name or null>",
-    "away_team": "<team name or null>",
-    "minute": <integer or null>,
-    "incident": "offside" | "handball" | "foul" | "penalty" | "generic"
-  },
-  "visualization": {
-    "title": "<one-line scene description>",
-    "frames": [
-      {
-        "label": "<frame label, e.g. 'Before pass' / 'At offside moment'>",
-        "ball": {"x": <0-68>, "y": <0-105>},
-        "home": [
-          {"id": 1, "x": <0-68>, "y": <0-105>, "pos": "ST", "num": 9, "name": "Surname"}
-        ],
-        "away": [
-          {"id": 1, "x": <0-68>, "y": <0-105>, "pos": "CB", "num": 4, "name": "Surname"}
-        ]
-      }
-    ],
-    "offside_y": <y-coord of horizontal offside line, or null>,
-    "incident_point": {"x": <0-68>, "y": <0-105>} or null
-  }
-}
+• create_pitch_animation — generate an animated football pitch visualization. Use this whenever showing player positions would help: VAR incidents, offside checks, corner kicks, free kicks, penalties, tactical formations, or any scenario where seeing the pitch adds clarity.
 
-RULES:
-- Include 4–6 players per team spread realistically across the pitch in a proper formation shape.
-- SPACING: every player must be at least 8 units away from every OTHER player (compare both x and y). Never stack players on top of each other.
-- Only the 1–2 players directly involved in the incident should be near incident_point. Everyone else holds their formation position.
-- Use REAL player names/numbers if the teams are well-known (e.g. World Cup 2022 Final).
-- For offside: frame 1 = before pass (attacker onside), frame 2 = at pass (attacker beyond offside_y line).
-- For handball: show ball trajectory across frames; incident_point = contact location.
-- For foul: incident_point = foul spot; only the fouler and fouled player are within 10 units of it; defenders and midfielders stay spread in formation.
-- Keep player ids STABLE across frames so CSS transitions animate the movement correctly."""
+You can chain tools — e.g. web_search for recent context, then search_fifa_rules for the rule, then create_pitch_animation to visualize it.
+For simple greetings or conversational messages, respond directly without calling any tools.
 
-INCIDENT_PREFIXES = {
-    "tactical": "This is a TACTICAL ANALYSIS question. Explain the tactical reasoning and expected outcome.",
-    "general":  "This is a GENERAL RULE question. Explain the rule clearly with any relevant examples.",
-}
+PITCH COORDINATE SYSTEM (used by create_pitch_animation):
+- Portrait pitch: x = 0–68 (left→right), y = 0–105 (top→bottom)
+- AWAY team defends TOP goal (y≈0): GK y≈5, defenders y≈15–25, mids y≈28–40, forwards y≈42–52
+- HOME team defends BOTTOM goal (y≈105): forwards y≈55–65, mids y≈65–78, defenders y≈80–92, GK y≈100
+- All x spread across 10–58; ALL coordinates strictly within x:0–68, y:0–105
+- offside_y = Y-coordinate of the horizontal offside line
+- incident_point = exact location of the key incident
+
+ANIMATION RULES:
+- Generate as many frames as needed to tell the full story — don't cap at 2
+- Each frame must show a distinct moment (different ball/player positions); never duplicate frames
+- Label frames descriptively: "Build-up", "Through ball", "Offside triggered", "VAR freeze", etc.
+- 5–7 players per team in realistic formation; players must be ≥8 units apart from each other
+- Keep player IDs stable across frames so movement animates smoothly
+- Use real player names/numbers for well-known teams"""
+
+# ── Tool definitions ─────────────────────────────────────────────────────────────
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web via DuckDuckGo for current football news, recent match results, player transfers, injuries, World Cup standings, or anything not covered by the FIFA Laws PDF. Use this for live/recent information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query, e.g. 'World Cup 2026 qualifiers', 'Mbappe injury update', 'Argentina vs France 2022 final highlights'"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_fifa_rules",
+            "description": "Search the FIFA Laws of the Game knowledge base for rules, VAR protocol, and official definitions. Use this before answering any rule question.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query, e.g. 'offside law 11 body parts', 'VAR review process', 'handball deliberate'"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_pitch_animation",
+            "description": "Create an animated football pitch visualization showing player positions across multiple frames. Use for VAR incidents, set pieces, tactical scenarios, or any situation where seeing positions on the pitch adds value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Short scene title shown above the pitch"},
+                    "frames": {
+                        "type": "array",
+                        "description": "Sequence of frames. Generate enough to tell the full story (typically 3–6).",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "label": {"type": "string"},
+                                "ball": {
+                                    "type": "object",
+                                    "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
+                                    "required": ["x", "y"]
+                                },
+                                "home": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "integer"}, "x": {"type": "number"},
+                                            "y": {"type": "number"}, "pos": {"type": "string"},
+                                            "num": {"type": "integer"}, "name": {"type": "string"}
+                                        },
+                                        "required": ["id", "x", "y", "pos", "num", "name"]
+                                    }
+                                },
+                                "away": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "integer"}, "x": {"type": "number"},
+                                            "y": {"type": "number"}, "pos": {"type": "string"},
+                                            "num": {"type": "integer"}, "name": {"type": "string"}
+                                        },
+                                        "required": ["id", "x", "y", "pos", "num", "name"]
+                                    }
+                                }
+                            },
+                            "required": ["label", "ball", "home", "away"]
+                        }
+                    },
+                    "offside_y": {
+                        "type": "number",
+                        "description": "Y-coordinate of the horizontal offside line; omit if not applicable"
+                    },
+                    "incident_point": {
+                        "type": "object",
+                        "description": "Location of the key incident; omit if not applicable",
+                        "properties": {"x": {"type": "number"}, "y": {"type": "number"}}
+                    }
+                },
+                "required": ["title", "frames"]
+            }
+        }
+    }
+]
 
 
-def _build_prompt(query: str, chunks: list[dict], incident_type: str) -> str:
-    context = "\n\n".join(
-        f"[Source {i+1}] Section: {c['section']} | Page: {c['page']}\n{c['text']}"
-        for i, c in enumerate(chunks)
+# ── Tool-calling LLM (non-streaming, decides which tools to use) ─────────────────
+
+async def _call_with_tools(messages: list[dict]):
+    """Call the LLM with tool definitions; returns the raw message object."""
+    from openai import AsyncOpenAI
+    if LLM_PROVIDER == "groq":
+        client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
+        model = GROQ_MODEL
+    elif LLM_PROVIDER == "openrouter" or OPENROUTER_API_KEY:
+        client = AsyncOpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
+        model = OPENROUTER_MODEL
+    else:
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        model = OPENAI_MODEL
+    resp = await client.chat.completions.create(
+        model=model,
+        messages=messages,
+        tools=TOOLS,
+        tool_choice="auto",
+        temperature=0.3,
+        max_tokens=8000,
     )
-    prefix = INCIDENT_PREFIXES.get(incident_type, "")
-    return f"{prefix}\n\nRelevant rules from FIFA Laws of the Game:\n\n{context}\n\nQuestion: {query}"
+    return resp.choices[0].message
 
 
-# ── LLM calls (batch) ───────────────────────────────────────────────────────────
+async def _stream_messages(messages: list[dict]):
+    """Stream text chunks from the LLM using a full messages array (no tools)."""
+    from openai import AsyncOpenAI
+    if LLM_PROVIDER == "groq":
+        client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
+        model = GROQ_MODEL
+    elif LLM_PROVIDER == "openrouter" or OPENROUTER_API_KEY:
+        client = AsyncOpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
+        model = OPENROUTER_MODEL
+    else:
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        model = OPENAI_MODEL
+    stream = await client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=0.3,
+        max_tokens=2048,
+        stream=True,
+    )
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
+
+
+# ── Legacy single-call LLM helpers (kept for non-Groq fallbacks) ─────────────────
 
 async def _llm(system: str, user: str) -> str:
     if LLM_PROVIDER == "groq":
@@ -184,11 +288,12 @@ async def _call_groq(system: str, user: str) -> str:
     kwargs = {}
     if system == SYSTEM_VAR:
         kwargs["response_format"] = {"type": "json_object"}
+    max_tok = 8000 if system == SYSTEM_VAR else 2048
     resp = await client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         temperature=0.3,
-        max_tokens=2048,
+        max_tokens=max_tok,
         **kwargs,
     )
     return resp.choices[0].message.content
@@ -283,11 +388,12 @@ async def _stream_ollama(system: str, user: str):
 async def _stream_groq(system: str, user: str):
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
+    max_tok = 8000 if system == SYSTEM_VAR else 2048
     stream = await client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         temperature=0.3,
-        max_tokens=2048,
+        max_tokens=max_tok,
         stream=True,
     )
     async for chunk in stream:
@@ -335,29 +441,68 @@ async def _stream_openrouter(system: str, user: str):
 def _parse_var_response(raw: str) -> dict:
     """
     Extract and validate the JSON object from the LLM's VAR response.
-    Falls back gracefully if the LLM returns imperfect output.
+    Handles truncated JSON by recovering complete frames already generated.
     """
-    # Strip markdown fences if the model included them despite instructions
     raw = re.sub(r"```(?:json)?", "", raw).strip()
 
+    # 1. Try clean parse first
     try:
         data = json.loads(raw)
+        return {
+            "answer": data.get("answer", ""),
+            "match": data.get("match"),
+            "visualization": data.get("visualization"),
+        }
     except json.JSONDecodeError:
-        # Try to find the first {...} block
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        if m:
-            try:
-                data = json.loads(m.group())
-            except Exception:
-                return {"answer": raw, "match": None, "visualization": None}
-        else:
-            return {"answer": raw, "match": None, "visualization": None}
+        pass
 
-    return {
-        "answer": data.get("answer", raw),
-        "match": data.get("match"),
-        "visualization": data.get("visualization"),
-    }
+    # 2. JSON was likely truncated — try to recover what we can
+    # Extract the "answer" text field
+    answer_match = re.search(r'"answer"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    answer_text = answer_match.group(1).encode().decode("unicode_escape") if answer_match else ""
+
+    # Extract complete frame objects (each ends with a closing "}" before the next frame or end)
+    frames = []
+    for fm in re.finditer(r'\{\s*"label"\s*:.*?"away"\s*:\s*\[.*?\]\s*\}', raw, re.DOTALL):
+        try:
+            frame = json.loads(fm.group())
+            frames.append(frame)
+        except json.JSONDecodeError:
+            pass
+
+    # Extract match block
+    match_data = None
+    match_m = re.search(r'"match"\s*:\s*(\{[^}]+\})', raw)
+    if match_m:
+        try:
+            match_data = json.loads(match_m.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    viz = None
+    if frames:
+        title_m = re.search(r'"title"\s*:\s*"([^"]+)"', raw)
+        viz = {
+            "title": title_m.group(1) if title_m else "Incident replay",
+            "frames": frames,
+            "offside_y": None,
+            "incident_point": None,
+        }
+        oy = re.search(r'"offside_y"\s*:\s*([0-9.]+)', raw)
+        if oy:
+            viz["offside_y"] = float(oy.group(1))
+        ip = re.search(r'"incident_point"\s*:\s*\{[^}]+\}', raw)
+        if ip:
+            try:
+                viz["incident_point"] = json.loads(ip.group().split(":", 1)[1].strip())
+            except Exception:
+                pass
+
+    # If we couldn't recover anything useful, return raw as plain text answer
+    if not answer_text and not frames:
+        return {"answer": raw, "match": None, "visualization": None}
+
+    return {"answer": answer_text or "VAR analysis complete.", "match": match_data, "visualization": viz}
 
 
 # ── Langflow path ────────────────────────────────────────────────────────────────
@@ -388,117 +533,148 @@ async def _call_langflow(query: str, incident_type: str) -> dict:
 
 async def stream_answer(query: str, incident_type: str = "general"):
     """
-    Async generator yielding SSE lines.
+    Agentic streaming answer.
+    The LLM decides autonomously whether to call search_fifa_rules and/or
+    create_pitch_animation based on the query.  The frontend still receives
+    the same SSE envelope:
       data: {"type":"chunk","text":"..."}
-      data: {"type":"done","sources":[...],"match_info":...,"viz_data":...}
-      data: {"type":"error","message":"..."}
+      data: {"type":"done","sources":[...],"match_info":null,"viz_data":...}
     """
     def sse(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
 
+    # ── Langflow fast-path (unchanged) ──────────────────────────────────────────
     if LANGFLOW_URL and LANGFLOW_FLOW_ID:
         try:
             result = await _call_langflow(query, incident_type)
             yield sse({"type": "chunk", "text": result["answer"]})
-            yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
         except Exception as e:
             yield sse({"type": "chunk", "text": f"LLM error: {e}"})
-            yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
-        return
-
-    try:
-        chunks = retrieve(query)
-    except Exception as e:
-        yield sse({"type": "chunk", "text": f"Knowledge base not ready — please ingest a FIFA PDF first. ({e})"})
         yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
         return
 
-    sources = [{"section": c["section"], "page": c["page"], "source": c["source"]} for c in chunks]
-
+    # ── Build initial messages ──────────────────────────────────────────────────
+    hint = ""
     if incident_type == "var":
-        # VAR needs full JSON before we can parse — collect, parse, then stream the answer text
-        context = "\n\n".join(
-            f"[Source {i+1}] Section: {c['section']} | Page: {c['page']}\n{c['text']}"
-            for i, c in enumerate(chunks)
-        )
-        user_msg = (
-            f"Relevant FIFA rules context:\n\n{context}\n\n"
-            f"VAR decision question: {query}"
-        )
-        raw_parts = []
-        async for chunk in _stream_llm(SYSTEM_VAR, user_msg):
-            raw_parts.append(chunk)
-        raw = "".join(raw_parts)
-        parsed = _parse_var_response(raw)
+        hint = "\n\n[Hint: the user wants to see a pitch animation for this scenario.]"
+    elif incident_type == "tactical":
+        hint = "\n\n[Hint: this is a tactical question — a pitch animation may help illustrate formations or movement.]"
 
-        # Stream the answer word by word for a natural typewriter feel
-        words = parsed["answer"].split(" ")
-        for i, word in enumerate(words):
-            yield sse({"type": "chunk", "text": word + ("" if i == len(words) - 1 else " ")})
+    messages: list[dict] = [
+        {"role": "system", "content": SYSTEM_AGENT},
+        {"role": "user",   "content": query + hint},
+    ]
 
-        yield sse({
-            "type": "done",
-            "sources": sources,
-            "match_info": parsed.get("match"),
-            "viz_data": parsed.get("visualization"),
+    viz_data: dict | None = None
+    sources: list[dict] = []
+
+    # ── Agentic tool-calling loop (max 4 rounds) ────────────────────────────────
+    for _ in range(4):
+        try:
+            msg = await _call_with_tools(messages)
+        except Exception as e:
+            yield sse({"type": "chunk", "text": f"[LLM error: {e}]"})
+            yield sse({"type": "done", "sources": sources, "match_info": None, "viz_data": viz_data})
+            return
+
+        tool_calls = getattr(msg, "tool_calls", None) or []
+
+        if not tool_calls:
+            # LLM chose to respond directly (no tools needed) — stream its content now
+            text = msg.content or ""
+            if text:
+                # Stream word by word for typewriter feel
+                words = text.split(" ")
+                for i, word in enumerate(words):
+                    yield sse({"type": "chunk", "text": word + ("" if i == len(words) - 1 else " ")})
+            yield sse({"type": "done", "sources": sources, "match_info": None, "viz_data": viz_data})
+            return
+
+        # Append the assistant's tool-call message
+        messages.append({
+            "role": "assistant",
+            "content": msg.content,
+            "tool_calls": [
+                {"id": tc.id, "type": "function",
+                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                for tc in tool_calls
+            ],
         })
-    else:
-        user_msg = _build_prompt(query, chunks, incident_type)
-        async for chunk in _stream_llm(SYSTEM_GENERAL, user_msg):
-            yield sse({"type": "chunk", "text": chunk})
-        yield sse({"type": "done", "sources": sources, "match_info": None, "viz_data": None})
 
+        # Execute each tool
+        for tc in tool_calls:
+            name = tc.function.name
+            try:
+                args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError:
+                args = {}
 
-async def answer(query: str, incident_type: str = "general") -> dict:
-    """
-    Returns:
-    {
-        "answer":     str,
-        "sources":    [{"section", "page", "source"}],
-        "match_info": dict | None,   # extracted match metadata (VAR only)
-        "viz_data":   dict | None,   # player-position frames for pitch view (VAR only)
-        "via":        "langflow" | "direct"
-    }
-    """
-    if LANGFLOW_URL and LANGFLOW_FLOW_ID:
-        return await _call_langflow(query, incident_type)
+            if name == "web_search":
+                q = args.get("query", query)
+                yield sse({"type": "tool_status", "tool": "web_search", "label": f'🌐 Searching web for "{q}"…'})
+                try:
+                    from duckduckgo_search import DDGS
+                    results = []
+                    with DDGS() as ddgs:
+                        for r in ddgs.text(q, max_results=5):
+                            results.append(r)
+                    if results:
+                        tool_result = "\n\n".join(
+                            f"[{i+1}] {r.get('title','')}\n{r.get('href','')}\n{r.get('body','')}"
+                            for i, r in enumerate(results)
+                        )
+                        yield sse({"type": "tool_status", "tool": "web_search", "label": f"✅ Found {len(results)} web results"})
+                    else:
+                        tool_result = "No results found."
+                        yield sse({"type": "tool_status", "tool": "web_search", "label": "⚠️ No web results found"})
+                except Exception as e:
+                    tool_result = f"Web search error: {e}"
+                    yield sse({"type": "tool_status", "tool": "web_search", "label": f"❌ Web search failed: {e}"})
 
+            elif name == "search_fifa_rules":
+                q = args.get("query", query)
+                yield sse({"type": "tool_status", "tool": "search_fifa_rules", "label": f'🔍 Searching FIFA rules for "{q}"…'})
+                try:
+                    rule_chunks = retrieve(q)
+                    sources = [{"section": c["section"], "page": c["page"], "source": c["source"]}
+                               for c in rule_chunks]
+                    context = "\n\n".join(
+                        f"[Source {i+1}] Section: {c['section']} | Page: {c['page']}\n{c['text']}"
+                        for i, c in enumerate(rule_chunks)
+                    )
+                    tool_result = f"FIFA rules retrieved:\n\n{context}"
+                    yield sse({"type": "tool_status", "tool": "search_fifa_rules", "label": f"✅ Found {len(rule_chunks)} relevant rule sections"})
+                except Exception as e:
+                    tool_result = f"Knowledge base error: {e}"
+                    yield sse({"type": "tool_status", "tool": "search_fifa_rules", "label": f"❌ Knowledge base error: {e}"})
+
+            elif name == "create_pitch_animation":
+                yield sse({"type": "tool_status", "tool": "create_pitch_animation", "label": "📺 Generating pitch animation…"})
+                viz_data = {
+                    "title":          args.get("title", ""),
+                    "frames":         args.get("frames", []),
+                    "offside_y":      args.get("offside_y"),
+                    "incident_point": args.get("incident_point"),
+                }
+                n_frames = len(viz_data["frames"])
+                tool_result = "Pitch animation created. Now write your text explanation."
+                yield sse({"type": "tool_status", "tool": "create_pitch_animation", "label": f"✅ Animation ready — {n_frames} frames"})
+
+            else:
+                tool_result = f"Unknown tool: {name}"
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": tool_result,
+            })
+
+    # ── Tools were used — stream the final text answer ──────────────────────────
+    # (only reached when the LLM called at least one tool and needs to explain)
     try:
-        chunks = retrieve(query)
+        async for chunk in _stream_messages(messages):
+            yield sse({"type": "chunk", "text": chunk})
     except Exception as e:
-        return {
-            "answer": f"Knowledge base not ready — please ingest a FIFA PDF first. ({e})",
-            "sources": [], "match_info": None, "viz_data": None, "via": "direct",
-        }
+        yield sse({"type": "chunk", "text": f"\n\n[Stream error: {e}]"})
 
-    sources = [{"section": c["section"], "page": c["page"], "source": c["source"]} for c in chunks]
-
-    if incident_type == "var":
-        # Build a user message that combines retrieved context with the query
-        context = "\n\n".join(
-            f"[Source {i+1}] Section: {c['section']} | Page: {c['page']}\n{c['text']}"
-            for i, c in enumerate(chunks)
-        )
-        user_msg = (
-            f"Relevant FIFA rules context:\n\n{context}\n\n"
-            f"VAR decision question: {query}"
-        )
-        raw = await _llm(SYSTEM_VAR, user_msg)
-        parsed = _parse_var_response(raw)
-        return {
-            "answer":     parsed["answer"],
-            "sources":    sources,
-            "match_info": parsed.get("match"),
-            "viz_data":   parsed.get("visualization"),
-            "via":        "direct",
-        }
-    else:
-        user_msg = _build_prompt(query, chunks, incident_type)
-        text = await _llm(SYSTEM_GENERAL, user_msg)
-        return {
-            "answer": text,
-            "sources": sources,
-            "match_info": None,
-            "viz_data": None,
-            "via": "direct",
-        }
+    yield sse({"type": "done", "sources": sources, "match_info": None, "viz_data": viz_data})

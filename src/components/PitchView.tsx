@@ -5,8 +5,13 @@ import type { VizData, PlayerDot } from '../types'
 const PW = 68
 const PH = 105
 
+function clamp(v: number, min: number, max: number) { return Math.min(Math.max(v, min), max) }
+
 function pct(x: number, y: number) {
-  return { left: `${(x / PW) * 100}%`, top: `${(y / PH) * 100}%` }
+  return {
+    left: `${(clamp(x, 0, PW) / PW) * 100}%`,
+    top:  `${(clamp(y, 0, PH) / PH) * 100}%`,
+  }
 }
 
 // Static SVG pitch markings — portrait orientation

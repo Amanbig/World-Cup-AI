@@ -23,7 +23,7 @@ from pydantic import BaseModel
 load_dotenv()
 
 from ingest import get_collection_stats, ingest
-from rag import answer, stream_answer
+from rag import stream_answer
 
 # ── app setup ───────────────────────────────────────────────────────────────────
 
@@ -48,13 +48,6 @@ class ChatRequest(BaseModel):
     message: str
     incident_type: str = "general"  # "var" | "tactical" | "general"
 
-
-class ChatResponse(BaseModel):
-    answer: str
-    sources: list[dict]
-    via: str
-    match_info: dict | None = None   # extracted match metadata (VAR only)
-    viz_data: dict | None = None     # player-position frames for pitch view (VAR only)
 
 
 # ── routes ───────────────────────────────────────────────────────────────────────
@@ -97,25 +90,6 @@ async def ingest_pdf(file: UploadFile = File(...)):
     finally:
         os.unlink(tmp_path)
 
-
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
-    """
-    Answer a World Cup question using RAG over the ingested FIFA documents.
-    Routes through Langflow if LANGFLOW_URL/LANGFLOW_FLOW_ID are configured,
-    otherwise runs direct in-process retrieval + LLM generation.
-    """
-    if not req.message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
-
-    result = await answer(req.message, req.incident_type)
-    return ChatResponse(
-        answer=result["answer"],
-        sources=result.get("sources", []),
-        via=result.get("via", "direct"),
-        match_info=result.get("match_info"),
-        viz_data=result.get("viz_data"),
-    )
 
 
 @app.post("/api/chat/stream")

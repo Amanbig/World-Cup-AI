@@ -1,103 +1,79 @@
 import { useEffect, useRef, useState } from "react";
 import ChatMessage from "./components/ChatMessage";
-import IncidentSelector from "./components/IncidentSelector";
-import MatchSidebar from "./components/MatchSidebar";
 import PitchView from "./components/PitchView";
-import type { Message, MatchInfo, MatchEvent, VizData } from "./types";
-import { HISTORICAL_MATCHES } from "./data/matches";
-import type { HistoricalMatch } from "./data/matches";
+import type { Message, MatchInfo, VizData, MatchEventDef } from "./types";
+import { HISTORICAL_MATCHES, YEARS, type HistoricalMatch } from "./data/matches";
 import "./App.css";
 
+// incident_type is now just a hint to the backend — the LLM decides what tools to call
 type IncidentType = "var" | "tactical" | "general";
 
-// In dev, Vite proxies /api → localhost:8000. In production, same origin.
 const API = import.meta.env.VITE_API_URL ?? "";
 
-const SUGGESTED: Record<IncidentType, string[]> = {
-  var: [
-    "Brazil's goal vs Argentina was ruled offside in the 71st minute. How does VAR check offside?",
-    "A handball inside the box — why was it given as a penalty by VAR?",
-    "The foul was outside the box but VAR upgraded it to a straight red card. Why?",
-  ],
-  tactical: [
-    "England switched from 4-3-3 to 5-4-1 at half-time. What does that mean defensively?",
-    "Why would a coach remove the holding midfielder when losing 1-0?",
-    "What is a high press and when does it break down under fatigue?",
-  ],
-  general: [
-    "What is the offside rule exactly? What body parts count?",
-    "How much stoppage time can a referee add and why?",
-    "When can a goalkeeper use their hands outside the penalty area?",
-  ],
+const EVENT_ICONS: Record<string, string> = {
+  goal: "⚽", card: "🟨", var: "📺", sub: "🔄",
+  corner: "🚩", freekick: "🎯", penalty: "⚡",
 };
 
-const DEFAULT_MATCH: MatchInfo = {
-  home_team: null,
-  away_team: null,
-  minute: null,
-  incident: "generic",
-};
 
-function makeId() {
-  return Math.random().toString(36).slice(2);
-}
+function makeId() { return Math.random().toString(36).slice(2); }
+
+const DEFAULT_MATCH_INFO: MatchInfo = { home_team: null, away_team: null, minute: null, incident: "generic" };
 
 export default function App() {
-  const [incidentType, setIncidentType] = useState<IncidentType>("var");
+  const [selectedMatch, setSelectedMatch] = useState<HistoricalMatch | null>(null);
+  const [dropOpen, setDropOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [kbReady, setKbReady] = useState<boolean | null>(null);
   const [kbChunks, setKbChunks] = useState(0);
   const [uploading, setUploading] = useState(false);
-
-  // VAR sidebar state
-  const [matchInfo, setMatchInfo] = useState<MatchInfo>(DEFAULT_MATCH);
-  const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
+  const [matchInfo, setMatchInfo] = useState<MatchInfo>(DEFAULT_MATCH_INFO);
   const [vizData, setVizData] = useState<VizData | null>(null);
-  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch(`${API}/api/status`)
-      .then((r) => r.json())
-      .then((d) => { setKbReady(d.ready); setKbChunks(d.chunks ?? 0); })
+      .then(r => r.json())
+      .then(d => { setKbReady(d.ready); setKbChunks(d.chunks ?? 0); })
       .catch(() => setKbReady(false));
   }, []);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  function updateMatchInfo(partial: Partial<MatchInfo>) {
-    setMatchInfo((prev) => ({ ...prev, ...partial }));
-  }
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   function handleMatchSelect(match: HistoricalMatch | null) {
-    setSelectedMatchId(match?.id ?? null);
+    setSelectedMatch(match);
+    setDropOpen(false);
     setVizData(null);
-    setMatchEvents([]);
-    if (match) {
-      setMatchInfo({
-        home_team: match.home,
-        away_team: match.away,
-        minute: 90,
-        incident: "generic",
-      });
-    } else {
-      setMatchInfo(DEFAULT_MATCH);
-    }
+    setActiveEventId(null);
+    setMatchInfo(match
+      ? { home_team: match.home, away_team: match.away, minute: 90, incident: "generic" }
+      : DEFAULT_MATCH_INFO
+    );
   }
 
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, forceType?: IncidentType) {
     if (!text.trim() || loading) return;
     setInput("");
 
+    // forceType is a hint for event chips; the LLM decides the real tool calls
+    const incidentType: IncidentType = forceType ?? "general";
     const userMsg: Message = { id: makeId(), role: "user", content: text, incidentType };
     const assistantId = makeId();
-    setMessages((prev) => [...prev, userMsg, { id: assistantId, role: "assistant", content: "", loading: true }]);
+    setMessages(prev => [...prev, userMsg, { id: assistantId, role: "assistant", content: "", loading: true }]);
     setLoading(true);
 
     try {
@@ -106,56 +82,44 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, incident_type: incidentType }),
       });
-
-      if (!res.ok || !res.body) throw new Error("Stream error");
-
+      if (!res.ok || !res.body) throw new Error(`Server error ${res.status}`);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buf = "";
-      let accumulated = "";
-
-      // Switch loading → streaming so text starts appearing with cursor
-      setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, loading: false, streaming: true } : m));
+      let buf = "", accumulated = "";
+      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, loading: false, streaming: true } : m));
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
-
         const lines = buf.split("\n");
         buf = lines.pop() ?? "";
-
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (!raw) continue;
           try {
             const evt = JSON.parse(raw);
-            if (evt.type === "chunk") {
+            if (evt.type === "tool_status") {
+              setMessages(prev => prev.map(m =>
+                m.id === assistantId ? { ...m, toolStatus: evt.label } : m
+              ));
+            } else if (evt.type === "chunk") {
               accumulated += evt.text;
               const snap = accumulated;
-              setMessages((prev) => prev.map((m) => m.id === assistantId ? { ...m, content: snap } : m));
+              setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: snap, toolStatus: undefined } : m));
             } else if (evt.type === "done") {
-              if (incidentType === "var") {
-                if (evt.match_info) {
-                  setMatchInfo((prev) => ({
-                    home_team: evt.match_info.home_team ?? prev.home_team,
-                    away_team: evt.match_info.away_team ?? prev.away_team,
-                    minute:    evt.match_info.minute    ?? prev.minute,
-                    incident:  evt.match_info.incident  ?? prev.incident,
-                  }));
-                }
-                if (evt.viz_data) setVizData(evt.viz_data);
-                setMatchEvents((prev) => [...prev, {
-                  id: makeId(),
-                  minute: evt.match_info?.minute ?? null,
-                  type: "var",
-                  description: evt.match_info?.incident
-                    ? `VAR: ${evt.match_info.incident.charAt(0).toUpperCase() + evt.match_info.incident.slice(1)}`
-                    : "VAR review",
-                }]);
+              // LLM decides when to create animations — show whenever viz_data is present
+              if (evt.viz_data) setVizData(evt.viz_data);
+              if (evt.match_info) {
+                setMatchInfo(prev => ({
+                  home_team: evt.match_info.home_team ?? prev.home_team,
+                  away_team: evt.match_info.away_team ?? prev.away_team,
+                  minute:    evt.match_info.minute    ?? prev.minute,
+                  incident:  evt.match_info.incident  ?? prev.incident,
+                }));
               }
-              setMessages((prev) => prev.map((m) =>
+              setMessages(prev => prev.map(m =>
                 m.id === assistantId ? { ...m, content: accumulated, sources: evt.sources ?? [], streaming: false } : m
               ));
             }
@@ -163,15 +127,16 @@ export default function App() {
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Could not reach the backend. Is it running on port 8000?";
-      setMessages((prev) => prev.map((m) =>
-        m.id === assistantId
-          ? { ...m, loading: false, content: msg }
-          : m
-      ));
+      const msg = err instanceof Error ? err.message : "Could not reach the backend.";
+      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, loading: false, streaming: false, content: msg } : m));
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleEventClick(ev: MatchEventDef) {
+    setActiveEventId(ev.id);
+    sendMessage(ev.prompt, "var");
   }
 
   async function uploadPdf(file: File) {
@@ -183,14 +148,7 @@ export default function App() {
       const data = await res.json();
       setKbReady(true);
       setKbChunks(data.chunks ?? 0);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: makeId(),
-          role: "assistant",
-          content: `Knowledge base ready. Indexed ${data.chunks} chunks from "${data.filename}". Ask me anything!`,
-        },
-      ]);
+      setMessages(prev => [...prev, { id: makeId(), role: "assistant", content: `Knowledge base ready — ${data.chunks} chunks indexed from "${data.filename}".` }]);
     } catch {
       alert("Upload failed — check the backend logs.");
     } finally {
@@ -199,183 +157,195 @@ export default function App() {
   }
 
   const isEmpty = messages.length === 0;
+  const homeTeam = matchInfo.home_team || selectedMatch?.home || "Home";
+  const awayTeam = matchInfo.away_team || selectedMatch?.away || "Away";
 
   return (
     <div className="app">
-      {/* ── Header ─────────────────────────────────────────────── */}
+      {/* ── Header ── */}
       <header className="header">
         <div className="header-brand">
           <span className="header-ball">⚽</span>
           <div>
             <h1 className="header-title">MatchMind</h1>
-            <p className="header-sub">AI World Cup Companion · Docling + Langflow</p>
+            <p className="header-sub">AI World Cup Companion</p>
           </div>
         </div>
         <div className="header-status">
           {kbReady === null && <span className="status-pill checking">Checking…</span>}
-          {kbReady === true && (
-            <span className="status-pill ready">{kbChunks.toLocaleString()} chunks ready</span>
-          )}
+          {kbReady === true && <span className="status-pill ready">{kbChunks.toLocaleString()} chunks ready</span>}
           {kbReady === false && (
-            <button
-              className="status-pill upload-prompt"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? "Ingesting…" : "Upload FIFA PDF to start"}
+            <button className="status-pill upload-prompt" onClick={() => fileRef.current?.click()} disabled={uploading}>
+              {uploading ? "Ingesting…" : "Upload FIFA PDF"}
             </button>
           )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={(e) => e.target.files?.[0] && uploadPdf(e.target.files[0])}
-          />
+          <input ref={fileRef} type="file" accept=".pdf" className="hidden"
+            onChange={e => e.target.files?.[0] && uploadPdf(e.target.files[0])} />
         </div>
       </header>
 
-      {/* ── Mode selector ──────────────────────────────────────── */}
-      <IncidentSelector
-        selected={incidentType}
-        onChange={setIncidentType}
-        onMatchSelect={handleMatchSelect}
-        selectedMatchId={selectedMatchId}
-      />
+      <div className="app-body">
+        {/* ── LEFT: pitch panel ── */}
+        <div className="left-col">
+          {/* Match selector */}
+          <div className="match-bar" ref={dropRef}>
+            <button
+              className={`match-bar-btn${dropOpen ? " open" : ""}${selectedMatch ? " active" : ""}`}
+              onClick={() => setDropOpen(v => !v)}
+            >
+              <span>🏟️</span>
+              <span className="mbb-label">
+                {selectedMatch ? `${selectedMatch.home} vs ${selectedMatch.away} · ${selectedMatch.year}` : "Select a match"}
+              </span>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, transition: "transform .2s", transform: dropOpen ? "rotate(180deg)" : "none" }}>
+                <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
 
-      {/* ── Body ───────────────────────────────────────────────── */}
-      {incidentType === "var" ? (
-        /* VAR mode: 3-column — scoreboard | pitch | chat */
-        <div className="var-layout">
-
-          {/* Left: scoreboard + events */}
-          <MatchSidebar
-            matchInfo={matchInfo}
-            events={matchEvents}
-            onMatchInfoChange={updateMatchInfo}
-          />
-
-          {/* Center: pitch fills full height */}
-          <div className="var-pitch-col">
-            <PitchView
-              vizData={vizData}
-              homeTeam={matchInfo.home_team || "Home"}
-              awayTeam={matchInfo.away_team || "Away"}
-            />
-          </div>
-
-          {/* Right: chat */}
-          <div className="chat-column">
-            <main className="chat-area">
-              {isEmpty ? (() => {
-                const activeMatch = selectedMatchId
-                  ? HISTORICAL_MATCHES.find(m => m.id === selectedMatchId) ?? null
-                  : null;
-                const chips = activeMatch ? activeMatch.queries : SUGGESTED.var;
-                return (
-                  <div className="empty-state">
-                    {activeMatch ? (
-                      <>
-                        <div className="empty-match-badge">
-                          <span className="empty-match-year">{activeMatch.year} · {activeMatch.stage}</span>
-                        </div>
-                        <p className="empty-headline">{activeMatch.home} vs {activeMatch.away}</p>
-                        <p className="empty-sub">
-                          {activeMatch.homeScore}–{activeMatch.awayScore}{activeMatch.note ? ` · ${activeMatch.note}` : ""}
-                          {" · "}Pick a moment to analyse
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="empty-headline">What do you want to understand?</p>
-                        <p className="empty-sub">Pick a VAR incident to analyse</p>
-                      </>
-                    )}
-                    <div className="suggestions">
-                      {chips.map((s) => (
-                        <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>{s}</button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })() : (
-                messages.map((m) => <ChatMessage key={m.id} message={m} />)
-              )}
-              <div ref={bottomRef} />
-            </main>
-            <footer className="input-bar">
-              <div className="input-bar-inner">
-                <input
-                  className="input-field"
-                  placeholder="Describe the VAR incident, teams, and minute…"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
-                  disabled={loading}
-                />
-                <button className="upload-btn" title="Upload FIFA PDF" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {uploading
-                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                  }
+            {dropOpen && (
+              <div className="match-dropdown left-dropdown">
+                <button className={`md-item md-live${!selectedMatch ? " active" : ""}`} onClick={() => handleMatchSelect(null)}>
+                  <span className="md-dot live" />
+                  <span>Live / Custom Match</span>
+                  <span className="md-live-badge">LIVE</span>
                 </button>
-                <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
-                  {loading
-                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/></svg>
-                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                  }
-                </button>
-              </div>
-            </footer>
-          </div>
-        </div>
-      ) : (
-        /* Tactical / General: full-width chat */
-        <div className="body-area">
-          <div className="chat-column">
-            <main className="chat-area">
-              {isEmpty ? (
-                <div className="empty-state">
-                  <p className="empty-headline">What do you want to understand?</p>
-                  <p className="empty-sub">Pick a question below or type your own</p>
-                  <div className="suggestions">
-                    {SUGGESTED[incidentType].map((s) => (
-                      <button key={s} className="suggestion-chip" onClick={() => sendMessage(s)}>{s}</button>
+                <div className="md-divider" />
+                {YEARS.map(year => (
+                  <div key={year}>
+                    <p className="md-year">{year} FIFA World Cup</p>
+                    {HISTORICAL_MATCHES.filter(m => m.year === year).map(m => (
+                      <button key={m.id} className={`md-item${selectedMatch?.id === m.id ? " active" : ""}`}
+                        onClick={() => handleMatchSelect(m)}>
+                        <span className="md-stage">{m.stage}</span>
+                        <span className="md-teams">{m.home} <span className="md-score">{m.homeScore}–{m.awayScore}</span> {m.away}</span>
+                        {m.note && <span className="md-note">{m.note}</span>}
+                      </button>
                     ))}
                   </div>
-                </div>
-              ) : (
-                messages.map((m) => <ChatMessage key={m.id} message={m} />)
-              )}
-              <div ref={bottomRef} />
-            </main>
-            <footer className="input-bar">
-              <div className="input-bar-inner">
-                <input
-                  className="input-field"
-                  placeholder={incidentType === "tactical" ? "Ask about a formation, substitution, or pressing system…" : "Ask any FIFA rule question…"}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
-                  disabled={loading}
-                />
-                <button className="upload-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {uploading
-                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                  }
-                </button>
-                <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
-                  {loading
-                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/></svg>
-                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                  }
-                </button>
+                ))}
               </div>
-            </footer>
+            )}
+          </div>
+
+          {/* Mini scoreboard */}
+          {selectedMatch && (
+            <div className="mini-score">
+              <div className="mini-score-team home">{selectedMatch.home}</div>
+              <div className="mini-score-center">
+                <div className="mini-score-num">
+                  <span>{selectedMatch.homeScore}</span>
+                  <span className="mini-score-dash">–</span>
+                  <span>{selectedMatch.awayScore}</span>
+                </div>
+                {selectedMatch.note && <div className="mini-score-note">{selectedMatch.note}</div>}
+                <div className="mini-score-meta">{selectedMatch.year} · {selectedMatch.stage}</div>
+              </div>
+              <div className="mini-score-team away">{selectedMatch.away}</div>
+            </div>
+          )}
+
+          {/* Pitch */}
+          <div className="pitch-container">
+            <PitchView vizData={vizData} homeTeam={homeTeam} awayTeam={awayTeam} />
           </div>
         </div>
-      )}
+
+        {/* ── RIGHT: event timeline + chat ── */}
+        <div className="right-col">
+          {/* Event timeline strip */}
+          {selectedMatch && selectedMatch.events.length > 0 && (
+            <div className="event-timeline">
+              <span className="tl-label">Events</span>
+              <div className="tl-chips">
+                {selectedMatch.events.map(ev => (
+                  <button
+                    key={ev.id}
+                    className={`ev-chip ev-${ev.type}${activeEventId === ev.id ? " active" : ""}`}
+                    onClick={() => handleEventClick(ev)}
+                    title={ev.prompt.slice(0, 120)}
+                    disabled={loading}
+                  >
+                    <span className="ev-icon">{EVENT_ICONS[ev.type] ?? "ℹ️"}</span>
+                    <span className="ev-min">{ev.minute}'</span>
+                    <span className="ev-desc">{ev.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Chat area */}
+          <main className="chat-area">
+            {isEmpty ? (
+              <div className="empty-state">
+                {selectedMatch ? (
+                  <>
+                    <div className="empty-match-badge">
+                      <span className="empty-match-year">{selectedMatch.year} · {selectedMatch.stage}</span>
+                    </div>
+                    <p className="empty-headline">{selectedMatch.home} vs {selectedMatch.away}</p>
+                    <p className="empty-sub">
+                      {selectedMatch.homeScore}–{selectedMatch.awayScore}
+                      {selectedMatch.note ? ` · ${selectedMatch.note}` : ""}
+                      {" · "}Click an event above or ask a question
+                    </p>
+                    <div className="suggestions">
+                      {selectedMatch.queries.map(s => (
+                        <button key={s} className="suggestion-chip" onClick={() => sendMessage(s, "var")} disabled={loading}>{s}</button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="empty-headline">Welcome to MatchMind</p>
+                    <p className="empty-sub">Select a match to explore events with visualizations, or ask any football question</p>
+                    <div className="suggestions">
+                      <button className="suggestion-chip" onClick={() => sendMessage("Show me how a corner kick set piece is organized in a 4-3-3 formation", "var")} disabled={loading}>
+                        Show me a corner kick set piece in a 4-3-3
+                      </button>
+                      <button className="suggestion-chip" onClick={() => sendMessage("Explain how VAR reviews an offside goal — show player positions", "var")} disabled={loading}>
+                        How does VAR review an offside goal?
+                      </button>
+                      <button className="suggestion-chip" onClick={() => sendMessage("What is the offside rule? Which body parts count?")} disabled={loading}>
+                        What is the offside rule?
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              messages.map(m => <ChatMessage key={m.id} message={m} />)
+            )}
+            <div ref={bottomRef} />
+          </main>
+
+          {/* Input bar */}
+          <footer className="input-bar">
+            <div className="input-bar-inner">
+              <input
+                className="input-field"
+                placeholder={selectedMatch ? `Ask about ${selectedMatch.home} vs ${selectedMatch.away}…` : "Ask about VAR, tactics, or any FIFA rule…"}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage(input)}
+                disabled={loading}
+              />
+              <button className="upload-btn" title="Upload FIFA PDF" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                {uploading
+                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                  : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                }
+              </button>
+              <button className="send-btn" onClick={() => sendMessage(input)} disabled={loading || !input.trim()}>
+                {loading
+                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/></svg>
+                  : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                }
+              </button>
+            </div>
+          </footer>
+        </div>
+      </div>
     </div>
   );
 }

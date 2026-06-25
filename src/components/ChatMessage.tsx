@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown'
 import type { Message } from '../types'
 
 interface Props {
@@ -7,7 +8,6 @@ interface Props {
 const INCIDENT_BADGE: Record<string, string> = {
   var:      "📺 VAR",
   tactical: "🎯 Tactical",
-  general:  "📖 Rule",
 }
 
 export default function ChatMessage({ message }: Props) {
@@ -33,11 +33,24 @@ export default function ChatMessage({ message }: Props) {
     )
   }
 
+  if (message.toolStatus && !message.content) {
+    return (
+      <div className="msg msg-assistant">
+        <div className="msg-avatar">⚽</div>
+        <div className="msg-bubble tool-status-bubble">
+          <span className="tool-status-text">{message.toolStatus}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="msg msg-assistant">
       <div className="msg-avatar">⚽</div>
       <div className={`msg-bubble${message.streaming ? " streaming" : ""}`}>
-        <p className="msg-text">{message.content}</p>
+        <div className="msg-markdown">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
         {message.sources && message.sources.length > 0 && (
           <div className="msg-sources">
             <p className="sources-title">Sources cited</p>
