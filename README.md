@@ -2,6 +2,12 @@
 
 An interactive AI-powered solution built for the **World Cup AI Challenge**. MatchMind helps fans, players, and match officials experience and understand football rules, VAR decisions, and tactical shifts through human-centered, explainable AI and **real-time pitch animations**.
 
+## 🎥 Project Walkthrough Video
+
+<video src="work_around_project.mp4" width="100%" controls></video>
+
+*If the video player above does not load, you can download or view it directly here: [work_around_project.mp4](work_around_project.mp4)*
+
 ---
 
 ## 🏆 World Cup AI Challenge Alignment
