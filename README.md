@@ -17,6 +17,8 @@ MatchMind was designed specifically to tackle the key themes of the competition 
 
 ## Architecture Overview
 
+![MatchMind Architecture](architecture.png)
+
 ```
 Browser (React + Vite)
       │
