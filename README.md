@@ -4,9 +4,9 @@ An interactive AI-powered solution built for the **World Cup AI Challenge**. Mat
 
 ## 🎥 Project Walkthrough Video
 
-[![MatchMind Walkthrough Video](video_thumbnail.png)](https://drive.google.com/file/d/1dQzEOgtEPIeGIqR2lnl72EWgWnrCqydi/view?usp=sharing)
+[![MatchMind Walkthrough Video](video_thumbnail.png)](https://youtu.be/zDbFYHBHZRY)
 
-*Click the player thumbnail above to watch the interactive demonstration on Google Drive.*
+*Click the player thumbnail above to watch the interactive demonstration on YouTube.*
 
 ---
 
