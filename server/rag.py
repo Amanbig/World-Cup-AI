@@ -571,12 +571,20 @@ def _parse_var_response(raw: str) -> dict:
 # ── Langflow path ────────────────────────────────────────────────────────────────
 
 async def _call_langflow(query: str, incident_type: str) -> dict:
+    hint = ""
+    if incident_type == "var":
+        hint = "\n\n[Hint: the user wants to see a pitch animation for this scenario.]"
+    elif incident_type == "tactical":
+        hint = "\n\n[Hint: this is a tactical question — a pitch animation may help illustrate formations or movement.]"
+
+    query_with_hint = query + hint
+
     url = f"{LANGFLOW_URL}/api/v1/run/{LANGFLOW_FLOW_ID}"
     payload = {
-        "input_value": query,
+        "input_value": query_with_hint,
         "input_type": "chat",
         "output_type": "chat",
-        "tweaks": {"incident_type": incident_type},
+        "tweaks": {},
     }
     headers = {}
     if LANGFLOW_API_KEY:
@@ -606,14 +614,30 @@ async def stream_answer(query: str, incident_type: str = "general"):
     def sse(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
 
-    # ── Langflow fast-path (unchanged) ──────────────────────────────────────────
+    # ── Langflow fast-path ──────────────────────────────────────────────────────
     if LANGFLOW_URL and LANGFLOW_FLOW_ID:
         try:
             result = await _call_langflow(query, incident_type)
-            yield sse({"type": "chunk", "text": result["answer"]})
+            text_response = result["answer"]
+
+            parsed = None
+            if "{" in text_response and "}" in text_response:
+                try:
+                    parsed = _parse_var_response(text_response)
+                except Exception:
+                    pass
+
+            if parsed and parsed.get("visualization"):
+                answer = parsed.get("answer", "")
+                viz = parsed.get("visualization")
+                yield sse({"type": "chunk", "text": answer})
+                yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": viz})
+            else:
+                yield sse({"type": "chunk", "text": text_response})
+                yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
         except Exception as e:
             yield sse({"type": "chunk", "text": f"LLM error: {e}"})
-        yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
+            yield sse({"type": "done", "sources": [], "match_info": None, "viz_data": None})
         return
 
     # ── Build initial messages ──────────────────────────────────────────────────
