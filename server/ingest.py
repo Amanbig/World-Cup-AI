@@ -1,23 +1,25 @@
 """
-PyMuPDF-powered PDF ingestion pipeline.
+Docling-powered PDF ingestion pipeline.
+
+Docling understands PDF layout — tables, headings, captions — giving much better
+chunks than raw text extraction (PyMuPDF).
 
 Usage:
   python ingest.py --pdf path/to/fifa_laws.pdf
-  python ingest.py --pdf path/to/var_protocol.pdf --collection var_rules
-
-PyMuPDF extracts structured text from PDFs, which is chunked and embedded
-with sentence-transformers before being stored in ChromaDB for RAG.
+  python ingest.py --pdf path/to/fifa_laws.pdf --collection var_rules
 """
 
 import argparse
 import os
-import re
 from pathlib import Path
 from typing import Generator
 
 import chromadb
-import fitz  # pymupdf
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+from docling.chunking import HybridChunker
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,64 +27,46 @@ load_dotenv()
 CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", str(Path(__file__).parent / "chroma_db"))
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "fifa_rules")
 
-CHUNK_MAX_CHARS = 800
-CHUNK_OVERLAP_CHARS = 100
-
-
-def _split_text(text: str, max_chars: int = CHUNK_MAX_CHARS, overlap: int = CHUNK_OVERLAP_CHARS) -> list[str]:
-    """Split long text into overlapping chunks on sentence boundaries."""
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    chunks, current = [], ""
-    for sentence in sentences:
-        if len(current) + len(sentence) > max_chars and current:
-            chunks.append(current.strip())
-            current = current[-overlap:] + " " + sentence
-        else:
-            current = (current + " " + sentence).strip()
-    if current:
-        chunks.append(current.strip())
-    return chunks
-
 
 def _iter_chunks(pdf_path: str) -> Generator[dict, None, None]:
-    """
-    Walk the PDF page by page and yield {text, section, page} dicts.
-    Tracks section headings by detecting ALL-CAPS or short bold-like lines.
-    """
-    doc = fitz.open(pdf_path)
-    current_section = "General"
+    print(f"[ingest] Parsing {pdf_path} with Docling…")
+    
+    # Configure pipeline options to disable OCR (speed up CPU processing)
+    pipeline_options = PdfPipelineOptions()
+    pipeline_options.do_ocr = False
+    
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+        }
+    )
+    result = converter.convert(pdf_path)
 
-    for page in doc:
-        page_no = page.number + 1
-        blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, block_type)
+    # HybridChunker: respects heading boundaries + token limit
+    chunker = HybridChunker(
+        tokenizer="sentence-transformers/all-MiniLM-L6-v2",
+        max_tokens=200,
+    )
 
-        for block in blocks:
-            raw_text = block[4].strip()
-            if not raw_text:
-                continue
+    for chunk in chunker.chunk(result.document):
+        # Last heading in the hierarchy = section name
+        headings = getattr(chunk.meta, "headings", None) or []
+        section = headings[-1] if headings else "General"
 
-            # Heuristic: short ALL-CAPS lines are likely section headings
-            if len(raw_text) < 80 and raw_text.isupper():
-                current_section = raw_text
-                continue
+        # Page number from provenance (first item)
+        page = 1
+        try:
+            items = getattr(chunk.meta, "doc_items", None) or []
+            if items and items[0].prov:
+                page = items[0].prov[0].page_no
+        except Exception:
+            pass
 
-            for chunk_text in _split_text(raw_text):
-                yield {
-                    "text": chunk_text,
-                    "section": current_section,
-                    "page": page_no,
-                }
-
-    doc.close()
+        yield {"text": chunk.text, "section": section, "page": page}
 
 
 def ingest(pdf_path: str, collection_name: str = CHROMA_COLLECTION) -> int:
-    """
-    Parse `pdf_path` with PyMuPDF, chunk it, embed with sentence-transformers,
-    and upsert into ChromaDB. Returns number of chunks stored.
-    """
     pdf_path = str(Path(pdf_path).resolve())
-    print(f"[ingest] Parsing {pdf_path} with PyMuPDF…")
 
     chunks = list(_iter_chunks(pdf_path))
     print(f"[ingest] Extracted {len(chunks)} chunks")
@@ -110,11 +94,7 @@ def ingest(pdf_path: str, collection_name: str = CHROMA_COLLECTION) -> int:
             ids=[f"{source_name}_{i + j}" for j, _ in enumerate(batch)],
             documents=[c["text"] for c in batch],
             metadatas=[
-                {
-                    "section": c["section"],
-                    "page": str(c["page"]),
-                    "source": source_name,
-                }
+                {"section": c["section"], "page": str(c["page"]), "source": source_name}
                 for c in batch
             ],
         )

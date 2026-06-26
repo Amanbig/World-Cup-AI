@@ -16,6 +16,7 @@ import json
 import os
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import chromadb
 import httpx
@@ -76,9 +77,9 @@ def retrieve(query: str, top_k: int = TOP_K) -> list[dict]:
 # ── Agent system prompt ──────────────────────────────────────────────────────────
 
 SYSTEM_AGENT = """You are MatchMind, an expert AI football companion for the FIFA World Cup.
-You have two tools available — use them whenever they add value:
+You have tools available — use them whenever they add value:
 
-• web_search — search the web (DuckDuckGo) for current football news, recent match results, player transfers, injuries, World Cup standings, or anything time-sensitive. Use this when the question is about recent events not covered by the FIFA PDF.
+• web_search — search the web (DuckDuckGo) for current football news, recent match results, player transfers, injuries, World Cup standings, or anything time-sensitive.
 
 • search_fifa_rules — look up the FIFA Laws of the Game knowledge base. Use this for any question about rules, regulations, VAR protocol, or official definitions. Always search before answering rule questions so your answers are accurate and cited.
 
@@ -87,21 +88,27 @@ You have two tools available — use them whenever they add value:
 You can chain tools — e.g. web_search for recent context, then search_fifa_rules for the rule, then create_pitch_animation to visualize it.
 For simple greetings or conversational messages, respond directly without calling any tools.
 
-PITCH COORDINATE SYSTEM (used by create_pitch_animation):
+PITCH COORDINATE SYSTEM:
 - Portrait pitch: x = 0–68 (left→right), y = 0–105 (top→bottom)
-- AWAY team defends TOP goal (y≈0): GK y≈5, defenders y≈15–25, mids y≈28–40, forwards y≈42–52
-- HOME team defends BOTTOM goal (y≈105): forwards y≈55–65, mids y≈65–78, defenders y≈80–92, GK y≈100
-- All x spread across 10–58; ALL coordinates strictly within x:0–68, y:0–105
-- offside_y = Y-coordinate of the horizontal offside line
-- incident_point = exact location of the key incident
+- AWAY team defends TOP goal (y≈0): GK y≈5, defenders y≈21–23, mids y≈32–40, forwards y≈48–53
+- HOME team defends BOTTOM goal (y≈105): forwards y≈52–57, mids y≈65–73, defenders y≈82–86, GK y≈100
+- ALL coordinates strictly within x:0–68, y:0–105
 
-ANIMATION RULES:
-- Generate as many frames as needed to tell the full story — don't cap at 2
-- Each frame must show a distinct moment (different ball/player positions); never duplicate frames
-- Label frames descriptively: "Build-up", "Through ball", "Offside triggered", "VAR freeze", etc.
-- 5–7 players per team in realistic formation; players must be ≥8 units apart from each other
-- Keep player IDs stable across frames so movement animates smoothly
-- Use real player names/numbers for well-known teams"""
+AVAILABLE FORMATIONS: 4-3-3 | 4-4-2 | 4-2-3-1 | 3-5-2 | 5-3-2 | 4-5-1
+
+PLAYER ID GUIDE (ids 1–11 go GK → defenders → midfielders → forwards):
+  id=1: GK
+  id=2: RB/RWB  id=3: CB  id=4: CB  id=5: LB/LWB
+  id=6: CM/CDM  id=7: CM  id=8: CM/CAM
+  id=9: RW/RWB  id=10: ST/CF  id=11: LW/ST
+
+HOW TO USE create_pitch_animation (token-efficient format):
+1. Pick home_formation and away_formation from the list above.
+2. List ALL players under "players.home" and "players.away" with their real names and jersey numbers — do this ONCE.
+3. In each frame, only include "moves" for players who actually change position. Players not listed in moves stay exactly where they were.
+4. Always include the ball position in every frame.
+5. Use the same player IDs consistently across all frames so the animation is smooth.
+6. Generate 2–5 frames to tell the full story; label them descriptively ("Build-up", "Through ball", "VAR freeze", etc.)."""
 
 # ── Tool definitions ─────────────────────────────────────────────────────────────
 
@@ -144,14 +151,55 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "create_pitch_animation",
-            "description": "Create an animated football pitch visualization showing player positions across multiple frames. Use for VAR incidents, set pieces, tactical scenarios, or any situation where seeing positions on the pitch adds value.",
+            "description": "Create an animated football pitch visualization. Specify formations and player names ONCE, then only output moves for players who change position each frame — much more token-efficient than full player arrays.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "Short scene title shown above the pitch"},
+                    "home_formation": {
+                        "type": "string",
+                        "enum": ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2", "5-3-2", "4-5-1"],
+                        "description": "Formation for HOME team (defends BOTTOM goal, y≈105)"
+                    },
+                    "away_formation": {
+                        "type": "string",
+                        "enum": ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2", "5-3-2", "4-5-1"],
+                        "description": "Formation for AWAY team (defends TOP goal, y≈0)"
+                    },
+                    "players": {
+                        "type": "object",
+                        "description": "Player names and jersey numbers for both teams — specified ONCE, not repeated per frame",
+                        "properties": {
+                            "home": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "integer", "description": "1–11 matching the formation ID guide"},
+                                        "name": {"type": "string"},
+                                        "num": {"type": "integer", "description": "Jersey number"}
+                                    },
+                                    "required": ["id", "name", "num"]
+                                }
+                            },
+                            "away": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "integer"},
+                                        "name": {"type": "string"},
+                                        "num": {"type": "integer"}
+                                    },
+                                    "required": ["id", "name", "num"]
+                                }
+                            }
+                        },
+                        "required": ["home", "away"]
+                    },
                     "frames": {
                         "type": "array",
-                        "description": "Sequence of frames. Generate enough to tell the full story (typically 3–6).",
+                        "description": "2–5 frames. Each frame only lists players who MOVE — everyone else stays put.",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -161,32 +209,22 @@ TOOLS = [
                                     "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
                                     "required": ["x", "y"]
                                 },
-                                "home": {
+                                "moves": {
                                     "type": "array",
+                                    "description": "Only players that change position in this frame",
                                     "items": {
                                         "type": "object",
                                         "properties": {
-                                            "id": {"type": "integer"}, "x": {"type": "number"},
-                                            "y": {"type": "number"}, "pos": {"type": "string"},
-                                            "num": {"type": "integer"}, "name": {"type": "string"}
+                                            "team": {"type": "string", "enum": ["home", "away"]},
+                                            "id":   {"type": "integer"},
+                                            "x":    {"type": "number"},
+                                            "y":    {"type": "number"}
                                         },
-                                        "required": ["id", "x", "y", "pos", "num", "name"]
-                                    }
-                                },
-                                "away": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "id": {"type": "integer"}, "x": {"type": "number"},
-                                            "y": {"type": "number"}, "pos": {"type": "string"},
-                                            "num": {"type": "integer"}, "name": {"type": "string"}
-                                        },
-                                        "required": ["id", "x", "y", "pos", "num", "name"]
+                                        "required": ["team", "id", "x", "y"]
                                     }
                                 }
                             },
-                            "required": ["label", "ball", "home", "away"]
+                            "required": ["label", "ball", "moves"]
                         }
                     },
                     "offside_y": {
@@ -199,7 +237,7 @@ TOOLS = [
                         "properties": {"x": {"type": "number"}, "y": {"type": "number"}}
                     }
                 },
-                "required": ["title", "frames"]
+                "required": ["title", "home_formation", "away_formation", "players", "frames"]
             }
         }
     }
@@ -208,9 +246,25 @@ TOOLS = [
 
 # ── Tool-calling LLM (non-streaming, decides which tools to use) ─────────────────
 
+def _recover_tool_call(failed: str):
+    """
+    Some models emit <function=NAME{ARGS}</function> instead of proper tool_calls JSON.
+    Parse that format and return a SimpleNamespace that mirrors the OpenAI message object.
+    """
+    match = re.search(r'<function=(\w+)(\{.*?\})\s*</function>', failed, re.DOTALL)
+    if not match:
+        return SimpleNamespace(content=None, tool_calls=None)
+    tool_name, args_str = match.group(1), match.group(2)
+    tc = SimpleNamespace(
+        id=f"call_{tool_name}_recovered",
+        function=SimpleNamespace(name=tool_name, arguments=args_str),
+    )
+    return SimpleNamespace(content=None, tool_calls=[tc])
+
+
 async def _call_with_tools(messages: list[dict]):
     """Call the LLM with tool definitions; returns the raw message object."""
-    from openai import AsyncOpenAI
+    from openai import AsyncOpenAI, BadRequestError
     if LLM_PROVIDER == "groq":
         client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL)
         model = GROQ_MODEL
@@ -220,15 +274,24 @@ async def _call_with_tools(messages: list[dict]):
     else:
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
         model = OPENAI_MODEL
-    resp = await client.chat.completions.create(
-        model=model,
-        messages=messages,
-        tools=TOOLS,
-        tool_choice="auto",
-        temperature=0.3,
-        max_tokens=8000,
-    )
-    return resp.choices[0].message
+    try:
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=TOOLS,
+            tool_choice="auto",
+            temperature=0.3,
+            max_tokens=8000,
+        )
+        return resp.choices[0].message
+    except BadRequestError as e:
+        # Model generated a malformed function call (e.g. <function=name{args}</function>).
+        # Recover the intended tool call from the failed_generation field.
+        body = e.body if isinstance(e.body, dict) else {}
+        failed = body.get("error", {}).get("failed_generation", "")
+        if failed:
+            return _recover_tool_call(failed)
+        raise
 
 
 async def _stream_messages(messages: list[dict]):
@@ -651,10 +714,13 @@ async def stream_answer(query: str, incident_type: str = "general"):
             elif name == "create_pitch_animation":
                 yield sse({"type": "tool_status", "tool": "create_pitch_animation", "label": "📺 Generating pitch animation…"})
                 viz_data = {
-                    "title":          args.get("title", ""),
-                    "frames":         args.get("frames", []),
-                    "offside_y":      args.get("offside_y"),
-                    "incident_point": args.get("incident_point"),
+                    "title":           args.get("title", ""),
+                    "home_formation":  args.get("home_formation", "4-3-3"),
+                    "away_formation":  args.get("away_formation", "4-4-2"),
+                    "players":         args.get("players", {"home": [], "away": []}),
+                    "frames":          args.get("frames", []),
+                    "offside_y":       args.get("offside_y"),
+                    "incident_point":  args.get("incident_point"),
                 }
                 n_frames = len(viz_data["frames"])
                 tool_result = "Pitch animation created. Now write your text explanation."

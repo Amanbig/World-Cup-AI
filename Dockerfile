@@ -25,14 +25,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # CPU-only torch — prevents sentence-transformers pulling the 2 GB CUDA build
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu
 
 # Python deps (separate layer for cache efficiency)
 COPY server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download embedding model so first ingest doesn't stall
+# Pre-download models so first ingest doesn't stall
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+RUN python -c "from docling.document_converter import DocumentConverter; DocumentConverter()"
 
 # Copy server source
 COPY server/ .

@@ -13,6 +13,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,6 +91,60 @@ async def ingest_pdf(file: UploadFile = File(...)):
     finally:
         os.unlink(tmp_path)
 
+
+
+@app.get("/api/matches/live")
+async def matches_live():
+    """Proxy ESPN public API to get current World Cup 2026 matches (no API key needed)."""
+    competition = os.getenv("ESPN_WC_COMPETITION", "fifa.world")
+    url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/{competition}/scoreboard"
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(url, headers={"User-Agent": "MatchMind/1.0"})
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        return {"matches": [], "error": str(e)}
+
+    matches = []
+    for event in data.get("events", []):
+        comp = (event.get("competitions") or [{}])[0]
+        competitors = comp.get("competitors", [])
+        home = next((c for c in competitors if c.get("homeAway") == "home"), None)
+        away = next((c for c in competitors if c.get("homeAway") == "away"), None)
+        if not home or not away:
+            continue
+
+        status_obj = event.get("status", {})
+        status_type = status_obj.get("type", {}).get("name", "")
+        is_live = status_type in ("STATUS_IN_PROGRESS",)
+
+        # Try to extract round/stage from competition notes or season type
+        stage = "Group Stage"
+        for note in comp.get("notes", []):
+            h = note.get("headline", "")
+            if h:
+                stage = h
+                break
+
+        try:
+            home_score = int(home.get("score") or 0)
+            away_score = int(away.get("score") or 0)
+        except (TypeError, ValueError):
+            home_score = away_score = 0
+
+        matches.append({
+            "id": f"live-{event.get('id', '')}",
+            "year": 2026,
+            "stage": stage,
+            "home": home["team"]["displayName"],
+            "away": away["team"]["displayName"],
+            "homeScore": home_score,
+            "awayScore": away_score,
+            "live": is_live,
+        })
+
+    return {"matches": matches}
 
 
 @app.post("/api/chat/stream")

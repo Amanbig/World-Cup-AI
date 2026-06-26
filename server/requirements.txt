@@ -7,10 +7,16 @@ python-dotenv==1.0.1
 httpx==0.28.1
 
 # PDF parsing
-pymupdf==1.27.2.3
+docling>=2.0.0
 
-# Embeddings — torch installed CPU-only in Dockerfile before this runs
+# PyTorch CPU-only configuration
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.12.1+cpu
+torchvision==0.27.1+cpu
+
+# Embeddings
 sentence-transformers==3.3.1
+
 
 # Vector store
 chromadb==1.5.9

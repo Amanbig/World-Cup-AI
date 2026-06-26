@@ -56,3 +56,15 @@ export interface Message {
   streaming?: boolean
   toolStatus?: string
 }
+
+export interface LiveMatch {
+  id: string
+  year: number
+  stage: string
+  home: string
+  away: string
+  homeScore: number
+  awayScore: number
+  note?: string
+  live?: boolean
+}

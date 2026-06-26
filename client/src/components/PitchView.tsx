@@ -148,9 +148,10 @@ export default function PitchView({ vizData, homeTeam, awayTeam }: Props) {
     )
   }
 
-  const frames = vizData.frames
-  const frame  = frames[frameIdx]
-  const total  = frames.length
+  const frames   = vizData.frames
+  const frame    = frames[frameIdx]
+  const total    = frames.length
+  const isStatic = total === 1 && frame.label === 'Kick-off'
 
   return (
     <div className="pitch-wrap">
@@ -187,8 +188,8 @@ export default function PitchView({ vizData, homeTeam, awayTeam }: Props) {
           style={{ ...pct(frame.ball.x, frame.ball.y), transition: 'left 0.7s cubic-bezier(.4,0,.2,1), top 0.7s cubic-bezier(.4,0,.2,1)' }}
         />
 
-        {/* Floating frame label */}
-        <div className="frame-label-float">{frame.label}</div>
+        {/* Floating frame label — suppressed on static kick-off */}
+        {!isStatic && <div className="frame-label-float">{frame.label}</div>}
       </div>
 
       <div className="pitch-team-label home-label">
@@ -196,8 +197,8 @@ export default function PitchView({ vizData, homeTeam, awayTeam }: Props) {
         {homeTeam || 'Home'}
       </div>
 
-      {/* Controls */}
-      <div className="pitch-controls">
+      {/* Controls — hidden for static kick-off view */}
+      <div className="pitch-controls" style={isStatic ? { visibility: 'hidden', height: 0, overflow: 'hidden', marginBottom: 0 } : undefined}>
         <div className="pitch-btns">
           <button className="pc-btn" onClick={() => { setPlaying(false); setFrameIdx(i => Math.max(0, i - 1)) }} disabled={frameIdx === 0}>‹</button>
           <button

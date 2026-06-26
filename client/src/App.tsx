@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import ChatMessage from "./components/ChatMessage";
 import PitchView from "./components/PitchView";
-import type { Message, MatchInfo, VizData, MatchEventDef } from "./types";
+import type { Message, MatchInfo, VizData, MatchEventDef, LiveMatch } from "./types";
 import { HISTORICAL_MATCHES, YEARS, type HistoricalMatch } from "./data/matches";
+import { hydrateVizData, createKickoffVizData } from "./data/formations";
 import "./App.css";
 
 // incident_type is now just a hint to the backend — the LLM decides what tools to call
@@ -23,6 +24,8 @@ const DEFAULT_MATCH_INFO: MatchInfo = { home_team: null, away_team: null, minute
 export default function App() {
   const [selectedMatch, setSelectedMatch] = useState<HistoricalMatch | null>(null);
   const [dropOpen, setDropOpen] = useState(false);
+  const [matchFilter, setMatchFilter] = useState("");
+  const [liveMatches, setLiveMatches] = useState<LiveMatch[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,6 +45,11 @@ export default function App() {
       .then(r => r.json())
       .then(d => { setKbReady(d.ready); setKbChunks(d.chunks ?? 0); })
       .catch(() => setKbReady(false));
+
+    fetch(`${API}/api/matches/live`)
+      .then(r => r.json())
+      .then(d => { if (d.matches?.length) setLiveMatches(d.matches); })
+      .catch(() => {/* live data optional */});
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -57,12 +65,14 @@ export default function App() {
   function handleMatchSelect(match: HistoricalMatch | null) {
     setSelectedMatch(match);
     setDropOpen(false);
-    setVizData(null);
     setActiveEventId(null);
-    setMatchInfo(match
-      ? { home_team: match.home, away_team: match.away, minute: 90, incident: "generic" }
-      : DEFAULT_MATCH_INFO
-    );
+    if (match) {
+      setMatchInfo({ home_team: match.home, away_team: match.away, minute: 90, incident: "generic" });
+      setVizData(createKickoffVizData(match.home, match.away));
+    } else {
+      setMatchInfo(DEFAULT_MATCH_INFO);
+      setVizData(null);
+    }
   }
 
   async function sendMessage(text: string, forceType?: IncidentType) {
@@ -109,8 +119,8 @@ export default function App() {
               const snap = accumulated;
               setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: snap, toolStatus: undefined } : m));
             } else if (evt.type === "done") {
-              // LLM decides when to create animations — show whenever viz_data is present
-              if (evt.viz_data) setVizData(evt.viz_data);
+              // Hydrate delta-format viz_data (formations + moves) into full PitchFrames
+              if (evt.viz_data) setVizData(hydrateVizData(evt.viz_data));
               if (evt.match_info) {
                 setMatchInfo(prev => ({
                   home_team: evt.match_info.home_team ?? prev.home_team,
@@ -204,25 +214,72 @@ export default function App() {
 
             {dropOpen && (
               <div className="match-dropdown left-dropdown">
-                <button className={`md-item md-live${!selectedMatch ? " active" : ""}`} onClick={() => handleMatchSelect(null)}>
+                {/* Search / filter */}
+                <div className="md-search-wrap">
+                  <input
+                    className="md-search"
+                    placeholder="Search team or match…"
+                    value={matchFilter}
+                    onChange={e => setMatchFilter(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                  />
+                </div>
+
+                <button className={`md-item md-live${!selectedMatch ? " active" : ""}`} onClick={() => { handleMatchSelect(null); setMatchFilter(""); }}>
                   <span className="md-dot live" />
                   <span>Live / Custom Match</span>
                   <span className="md-live-badge">LIVE</span>
                 </button>
                 <div className="md-divider" />
-                {YEARS.map(year => (
-                  <div key={year}>
-                    <p className="md-year">{year} FIFA World Cup</p>
-                    {HISTORICAL_MATCHES.filter(m => m.year === year).map(m => (
-                      <button key={m.id} className={`md-item${selectedMatch?.id === m.id ? " active" : ""}`}
-                        onClick={() => handleMatchSelect(m)}>
-                        <span className="md-stage">{m.stage}</span>
-                        <span className="md-teams">{m.home} <span className="md-score">{m.homeScore}–{m.awayScore}</span> {m.away}</span>
-                        {m.note && <span className="md-note">{m.note}</span>}
-                      </button>
-                    ))}
-                  </div>
-                ))}
+
+                {/* 2026 WC live matches from ESPN */}
+                {(() => {
+                  const q = matchFilter.toLowerCase();
+                  const filtered = liveMatches.filter(m =>
+                    !q || m.home.toLowerCase().includes(q) || m.away.toLowerCase().includes(q) || m.stage.toLowerCase().includes(q)
+                  );
+                  if (!filtered.length) return null;
+                  return (
+                    <div>
+                      <p className="md-year">2026 FIFA World Cup <span className="md-live-badge" style={{ marginLeft: 6 }}>LIVE</span></p>
+                      {filtered.map(m => (
+                        <button key={m.id}
+                          className={`md-item${selectedMatch?.id === m.id ? " active" : ""}`}
+                          onClick={() => { handleMatchSelect({ ...m, queries: [], events: [] } as any); setMatchFilter(""); }}
+                        >
+                          {m.live && <span className="md-dot live" style={{ flexShrink: 0 }} />}
+                          <span className="md-stage">{m.stage}</span>
+                          <span className="md-teams">{m.home} <span className="md-score">{m.homeScore}–{m.awayScore}</span> {m.away}</span>
+                        </button>
+                      ))}
+                      <div className="md-divider" />
+                    </div>
+                  );
+                })()}
+
+                {/* Historical matches filtered by search */}
+                {YEARS.map(year => {
+                  const q = matchFilter.toLowerCase();
+                  const filtered = HISTORICAL_MATCHES.filter(m =>
+                    m.year === year &&
+                    (!q || m.home.toLowerCase().includes(q) || m.away.toLowerCase().includes(q) || m.stage.toLowerCase().includes(q))
+                  );
+                  if (!filtered.length) return null;
+                  return (
+                    <div key={year}>
+                      <p className="md-year">{year} FIFA World Cup</p>
+                      {filtered.map(m => (
+                        <button key={m.id} className={`md-item${selectedMatch?.id === m.id ? " active" : ""}`}
+                          onClick={() => { handleMatchSelect(m); setMatchFilter(""); }}>
+                          <span className="md-stage">{m.stage}</span>
+                          <span className="md-teams">{m.home} <span className="md-score">{m.homeScore}–{m.awayScore}</span> {m.away}</span>
+                          {m.note && <span className="md-note">{m.note}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

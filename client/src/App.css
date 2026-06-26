@@ -98,6 +98,15 @@ body {
 .left-dropdown::-webkit-scrollbar { width: 3px; }
 .left-dropdown::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 99px; }
 
+/* Dropdown search box */
+.md-search-wrap { padding: 4px 4px 6px; }
+.md-search {
+  width: 100%; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-3);
+  color: var(--text); font-size: 0.8rem; outline: none; box-sizing: border-box;
+}
+.md-search:focus { border-color: var(--accent); }
+
 /* Keep shared dropdown item styles */
 .md-live { display: flex; align-items: center; gap: 8px; }
 .md-live-badge {
