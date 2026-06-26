@@ -1,7 +1,17 @@
 # MatchMind — AI World Cup Companion
 
-A React + FastAPI app that answers FIFA rules and VAR questions with **real-time pitch animations**.  
-Two backend modes — run either or switch between them with one env-var change.
+An interactive AI-powered solution built for the **World Cup AI Challenge**. MatchMind helps fans, players, and match officials experience and understand football rules, VAR decisions, and tactical shifts through human-centered, explainable AI and **real-time pitch animations**.
+
+---
+
+## 🏆 World Cup AI Challenge Alignment
+
+MatchMind was designed specifically to tackle the key themes of the competition using the required open-source and enterprise technology stack:
+
+*   **Docling Integration**: Used to perform layout-aware document ingestion of the official 230-page *FIFA Laws of the Game 2024/25*. By using **Docling's PDF extraction**, we preserve complex nested tables (e.g., misconduct guidelines, offside visual boundaries, card limits) that standard PDF loaders drop, ensuring a zero-hallucination knowledge base for RAG.
+*   **Langflow Pipeline**: Integrated as a fully custom visual agent flow (`langflow/MatchMind RAG.json`). Langflow manages the visual document loading, recursive chunking, embedding, vector database interactions (ChromaDB), and agentic tool routing in a clean, observable visual canvas.
+*   **IBM Granite Support**: MatchMind supports **IBM Granite** (`ibm/granite-13b-chat-v2`) via Watsonx as its core reasoning LLM to handle sports rule logic, semantic search evaluation, and pitch coordinate reasoning.
+*   **Human-Centered Explainability**: Answers rule queries (like *"Why was that offside checked by VAR?"*) and generates structured play coordinate frames streamed to the frontend via SSE. The React client then renders **interactive pitch animation playbacks** showing players moving, ball trajectories, and offside lines to make complex decisions intuitive and accessible.
 
 ---
 
@@ -61,8 +71,16 @@ CHROMA_COLLECTION=fifa_rules
 # CORS
 CORS_ORIGINS=http://localhost:5173,http://localhost:8000
 
-# LLM — Groq (recommended, free)
-LLM_PROVIDER=groq
+# LLM Provider: 'groq' | 'openai' | 'watsonx' | 'ollama'
+LLM_PROVIDER=watsonx
+
+# If using IBM Watsonx (Granite)
+WATSONX_API_KEY=your_ibm_cloud_api_key
+WATSONX_PROJECT_ID=your_watsonx_project_id
+WATSONX_URL=https://us-south.ml.cloud.ibm.com
+WATSONX_MODEL=ibm/granite-13b-chat-v2
+
+# If using Groq (free tier)
 GROQ_API_KEY=gsk_...
 GROQ_MODEL=llama-3.3-70b-versatile
 
@@ -323,17 +341,20 @@ Services:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GROQ_API_KEY` | Yes (Direct) | — | Free at console.groq.com |
-| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model |
-| `LLM_PROVIDER` | No | `openai` | `groq` / `openrouter` / `openai` / `ollama` |
-| `CHROMA_DB_PATH` | No | `./server/chroma_db` | Absolute path to ChromaDB |
-| `CHROMA_COLLECTION` | No | `fifa_rules` | Collection name |
+| `LLM_PROVIDER` | No | `openai` | `watsonx` / `groq` / `openai` / `ollama` / `openrouter` |
+| `WATSONX_API_KEY` | Yes (Watsonx) | — | IBM Cloud API Key |
+| `WATSONX_PROJECT_ID` | Yes (Watsonx) | — | Watsonx Project ID |
+| `WATSONX_URL` | No | `https://us-south.ml.cloud.ibm.com` | IBM Cloud Watsonx instance URL |
+| `WATSONX_MODEL` | No | `ibm/granite-13b-chat-v2` | IBM Granite chat model identifier |
+| `GROQ_API_KEY` | Yes (Groq) | — | API key from console.groq.com |
+| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model identifier |
+| `CHROMA_DB_PATH` | No | `./server/chroma_db` | Absolute path to ChromaDB storage |
+| `CHROMA_COLLECTION` | No | `fifa_rules` | Target ChromaDB collection name |
 | `CORS_ORIGINS` | No | `http://localhost:5173` | Comma-separated allowed origins |
-| `LANGFLOW_URL` | No | — | Set to enable Langflow mode |
-| `LANGFLOW_FLOW_ID` | No | — | Flow UUID from Langflow UI |
-| `LANGFLOW_API_KEY` | No | — | Only if Langflow auth is on |
-| `OPENAI_API_KEY` | No | — | If `LLM_PROVIDER=openai` |
-| `OPENROUTER_API_KEY` | No | — | If using OpenRouter |
+| `LANGFLOW_URL` | No | — | Set to enable Langflow backend mode |
+| `LANGFLOW_FLOW_ID` | No | — | Custom flow UUID from Langflow UI |
+| `LANGFLOW_API_KEY` | No | — | Optional x-api-key if Langflow auth is active |
+| `OPENAI_API_KEY` | Yes (OpenAI) | — | OpenAI API key |
 
 ---
 
